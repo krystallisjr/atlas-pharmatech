@@ -1,0 +1,50 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+/tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Frontend
+atlas-frontend/node_modules/
+atlas-frontend/.next/
+atlas-frontend/out/
+atlas-frontend/build/
+atlas-frontend/dist/
+atlas-frontend/.turbo/
+atlas-frontend/package-lock.json
+atlas-frontend/yarn.lock
+atlas-frontend/pnpm-lock.yaml
+
+# TLS Certificates (regenerate on deployment)
+certs/*.pem
+certs/*.key
+
+# Temporary files
+*.tmp
+*.temp
+*.bak

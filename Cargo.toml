@@ -1,0 +1,89 @@
+[package]
+name = "atlas-pharma"
+version = "0.1.0"
+edition = "2021"
+default-run = "atlas-pharma"
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["multipart"] }
+axum-server = { version = "0.6", features = ["tls-rustls"] }  # TLS support for Axum
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+futures = "0.3"
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "migrate", "rust_decimal", "ipnetwork"] }
+pgvector = { version = "0.3", features = ["sqlx"] }  # Vector database for RAG embeddings
+
+# Financial calculations
+rust_decimal = { version = "1.33", features = ["serde", "db-postgres"] }
+rust_decimal_macros = "1.33"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Authentication & Security
+jsonwebtoken = "9.2"
+bcrypt = "0.15"
+aes-gcm = "0.10"  # AES-256-GCM encryption
+rand = "0.8"  # Cryptographic random number generation
+argon2 = "0.5"  # For key derivation
+dashmap = "6.0"  # Thread-safe HashMap for rate limiting
+axum-extra = { version = "0.9", features = ["cookie", "cookie-private"] }  # Secure cookies
+totp-rs = { version = "5.5", features = ["qr", "serde_support"] }  # MFA/TOTP
+qrcode = "0.14"  # QR code generation for MFA
+image = "0.25"  # QR code image encoding
+sodiumoxide = "0.2"  # Libsodium Ed25519 signatures for regulatory compliance
+hex = "0.4"  # Hex encoding for signatures and keys
+
+# Time/UUID
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+time = { version = "0.3", features = ["serde"] }
+
+# Validation
+validator = { version = "0.18", features = ["derive"] }
+regex = "1.10"
+
+# Environment/Dotenv
+dotenvy = "0.15"
+dotenv = "0.15"  # For compatibility with older code patterns
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# HTTP client (for external APIs if needed)
+reqwest = { version = "0.11", features = ["json", "cookies"] }
+
+# OAuth & ERP Integration
+hmac = "0.12"  # HMAC for OAuth 1.0 and webhook verification
+percent-encoding = "2.3"  # URL encoding for OAuth parameters
+
+# File parsing
+csv = "1.3"
+calamine = "0.24" # Excel parsing
+base64 = "0.21"
+sha2 = "0.10"
+
+# AI/ML
+# Using reqwest directly for Anthropic API (no official SDK yet)
+# Will build our own Claude service wrapper
+
+[[bin]]
+name = "atlas-pharma"
+path = "src/main.rs"
+
+[[bin]]
+name = "seed_knowledge_base"
+path = "src/bin/seed_knowledge_base.rs"
+
+[dev-dependencies]
+axum-test = "15.0"

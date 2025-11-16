@@ -1,0 +1,4 @@
+ndc_code,brand_name,generic_name,manufacturer,quantity,batch_number,expiry_date,unit_price,storage_location,category,strength,dosage_form
+0378-6150-10,Amoxicillin,Amoxicillin,Mylan Pharmaceuticals,500,BATCH-2024-001,2025-12-31,12.50,Room A1,Antibiotic,500mg,Capsule
+0591-0405-01,Lisinopril,Lisinopril,Actavis Pharma,1000,BATCH-2024-002,2026-06-30,8.75,Room B2,Cardiovascular,10mg,Tablet
+50090-0001-00,Metformin,Metformin HCL,A-S Medication Solutions,750,BATCH-2024-003,2025-09-15,15.00,Room A3,Diabetes,500mg,Tablet

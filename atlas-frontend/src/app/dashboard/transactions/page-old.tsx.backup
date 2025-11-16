@@ -1,0 +1,485 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { DashboardLayout } from '@/components/dashboard-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Package,
+  DollarSign,
+  Calendar,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Eye,
+  Users,
+  TrendingUp,
+  Download,
+  Filter
+} from 'lucide-react';
+import { MarketplaceService } from '@/lib/services';
+import {
+  Transaction,
+  Inquiry,
+  TRANSACTION_STATUS,
+  INQUIRY_STATUS
+} from '@/types/pharmaceutical';
+import { toast } from 'react-toastify';
+
+export default function TransactionsPage() {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
+
+  useEffect(() => {
+    loadTransactions();
+  }, []);
+
+  const loadTransactions = async () => {
+    try {
+      setIsLoading(true);
+      const transactionsData = await MarketplaceService.getUserTransactions();
+      setTransactions(transactionsData);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load transactions');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCompleteTransaction = async (transactionId: string) => {
+    try {
+      await MarketplaceService.completeTransaction(transactionId, { inquiry_id: '' });
+      setTransactions(prev => prev.map(tx =>
+        tx.id === transactionId ? { ...tx, status: TRANSACTION_STATUS.COMPLETED } : tx
+      ));
+      toast.success('Transaction completed successfully');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to complete transaction');
+    }
+  };
+
+  const handleCancelTransaction = async (transactionId: string) => {
+    if (!confirm('Are you sure you want to cancel this transaction?')) return;
+
+    try {
+      await MarketplaceService.cancelTransaction(transactionId);
+      setTransactions(prev => prev.map(tx =>
+        tx.id === transactionId ? { ...tx, status: TRANSACTION_STATUS.CANCELLED } : tx
+      ));
+      toast.success('Transaction cancelled successfully');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel transaction');
+    }
+  };
+
+  const openDetailsDialog = (transaction: Transaction) => {
+    setSelectedTransaction(transaction);
+    setIsDetailsDialogOpen(true);
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case TRANSACTION_STATUS.PENDING:
+        return <Clock className="h-4 w-4 text-yellow-500" />;
+      case TRANSACTION_STATUS.COMPLETED:
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case TRANSACTION_STATUS.CANCELLED:
+        return <XCircle className="h-4 w-4 text-red-500" />;
+      default:
+        return <Clock className="h-4 w-4 text-gray-500" />;
+    }
+  };
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case TRANSACTION_STATUS.PENDING:
+        return 'secondary';
+      case TRANSACTION_STATUS.COMPLETED:
+        return 'default';
+      case TRANSACTION_STATUS.CANCELLED:
+        return 'destructive';
+      default:
+        return 'secondary';
+    }
+  };
+
+  const filteredTransactions = transactions.filter(transaction => {
+    const matchesStatus = statusFilter === 'all' || transaction.status === statusFilter;
+
+    // Simple date filtering - in a real app, you'd want more sophisticated date filtering
+    const matchesDate = dateFilter === 'all' || true; // Placeholder for date filtering logic
+
+    return matchesStatus && matchesDate;
+  });
+
+  // Calculate statistics
+  const stats = {
+    total: transactions.length,
+    completed: transactions.filter(tx => tx.status === TRANSACTION_STATUS.COMPLETED).length,
+    pending: transactions.filter(tx => tx.status === TRANSACTION_STATUS.PENDING).length,
+    cancelled: transactions.filter(tx => tx.status === TRANSACTION_STATUS.CANCELLED).length,
+    totalValue: transactions.reduce((sum, tx) => sum + parseFloat(tx.total_price), 0),
+    averageValue: transactions.length > 0 ?
+      transactions.reduce((sum, tx) => sum + parseFloat(tx.total_price), 0) / transactions.length : 0,
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold text-gray-900">Transactions</h1>
+            <p className="text-gray-600">Manage and track all your pharmaceutical transactions</p>
+          </div>
+          <div className="flex space-x-3">
+            <Button variant="outline">
+              <Download className="h-4 w-4 mr-2" />
+              Export Transactions
+            </Button>
+          </div>
+        </div>
+
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Transactions</CardTitle>
+              <Package className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.total}</div>
+              <p className="text-xs text-muted-foreground">
+                All time transactions
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Value</CardTitle>
+              <DollarSign className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">${stats.totalValue.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">
+                Avg: ${stats.averageValue.toFixed(2)} per transaction
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Completed</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.completed}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.total > 0 ? `${((stats.completed / stats.total) * 100).toFixed(1)}% completion rate` : 'No transactions yet'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pending</CardTitle>
+              <Clock className="h-4 w-4 text-orange-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.pending}</div>
+              <p className="text-xs text-muted-foreground">
+                Awaiting completion
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filters */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Filters
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value={TRANSACTION_STATUS.PENDING}>Pending</SelectItem>
+                  <SelectItem value={TRANSACTION_STATUS.COMPLETED}>Completed</SelectItem>
+                  <SelectItem value={TRANSACTION_STATUS.CANCELLED}>Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Filter by date" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="week">This Week</SelectItem>
+                  <SelectItem value="month">This Month</SelectItem>
+                  <SelectItem value="year">This Year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Transactions List */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Transactions ({filteredTransactions.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {filteredTransactions.length === 0 ? (
+              <div className="text-center py-8">
+                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No transactions found</h3>
+                <p className="text-gray-600">
+                  {statusFilter !== 'all' || dateFilter !== 'all'
+                    ? 'Try adjusting your filters'
+                    : 'Start trading in the marketplace to see transactions here'
+                  }
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Transaction Details</TableHead>
+                      <TableHead>Buyer/Seller</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Quantity</TableHead>
+                      <TableHead>Total Value</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTransactions.map((transaction) => (
+                      <TableRow key={transaction.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            {getStatusIcon(transaction.status)}
+                            <span className="font-medium text-sm">
+                              #{transaction.id.slice(-8)}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex items-center space-x-1">
+                              <Users className="h-3 w-3 text-gray-400" />
+                              <span className="text-sm">
+                                {transaction.buyer?.company_name}
+                              </span>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <Package className="h-3 w-3 text-gray-400" />
+                              <span className="text-xs text-gray-500">
+                                Seller: {transaction.seller?.company_name}
+                              </span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium text-sm">
+                              {transaction.buyer_id ? transaction.seller_id ? 'N/A' : 'N/A' : 'N/A'}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {/* This would need to be populated with actual inquiry data */}
+                              Product details
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {transaction.quantity} units
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm font-medium">
+                            ${parseFloat(transaction.total_price).toLocaleString()}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            ${parseFloat(transaction.unit_price).toFixed(2)}/unit
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2 text-sm">
+                            <Calendar className="h-3 w-3 text-gray-400" />
+                            <span>{new Date(transaction.transaction_date).toLocaleDateString()}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(transaction.status)}>
+                            {transaction.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDetailsDialog(transaction)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {transaction.status === TRANSACTION_STATUS.PENDING && (
+                              <div className="flex space-x-1">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleCompleteTransaction(transaction.id)}
+                                  className="h-8 px-2"
+                                >
+                                  Complete
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleCancelTransaction(transaction.id)}
+                                  className="h-8 px-2"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Transaction Details Dialog */}
+        <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Transaction Details</DialogTitle>
+            </DialogHeader>
+            {selectedTransaction && (
+              <div className="space-y-6">
+                {/* Transaction Overview */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-gray-900 mb-3">Transaction Overview</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium">Transaction ID:</span>
+                      <p>#{selectedTransaction.id}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium">Status:</span>
+                      <p>
+                        <Badge variant={getStatusBadgeVariant(selectedTransaction.status)}>
+                          {selectedTransaction.status}
+                        </Badge>
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium">Transaction Date:</span>
+                      <p>{new Date(selectedTransaction.transaction_date).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium">Total Value:</span>
+                      <p className="font-semibold">${parseFloat(selectedTransaction.total_price).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Product Details */}
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-3">Product Details</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium">Quantity:</span>
+                      <p>{selectedTransaction.quantity} units</p>
+                    </div>
+                    <div>
+                      <span className="font-medium">Unit Price:</span>
+                      <p>${parseFloat(selectedTransaction.unit_price).toFixed(2)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Parties Information */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h5 className="font-medium text-blue-900 mb-2">Buyer Information</h5>
+                    <p className="text-sm text-blue-800">{selectedTransaction.buyer?.company_name}</p>
+                    <p className="text-sm text-blue-600">{selectedTransaction.buyer?.email || 'Email not available'}</p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h5 className="font-medium text-green-900 mb-2">Seller Information</h5>
+                    <p className="text-sm text-green-800">{selectedTransaction.seller?.company_name}</p>
+                    <p className="text-sm text-green-600">{selectedTransaction.seller?.email || 'Email not available'}</p>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                {selectedTransaction.status === TRANSACTION_STATUS.PENDING && (
+                  <div className="flex space-x-3 pt-4 border-t">
+                    <Button
+                      onClick={() => handleCompleteTransaction(selectedTransaction.id)}
+                      className="flex-1"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Complete Transaction
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => handleCancelTransaction(selectedTransaction.id)}
+                      className="flex-1"
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Cancel Transaction
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </DashboardLayout>
+  );
+}

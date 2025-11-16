@@ -1,0 +1,430 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/auth-context';
+import { DashboardLayout } from '@/components/dashboard-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Search,
+  Filter,
+  MessageSquare,
+  Calendar,
+  DollarSign,
+  Package,
+  MapPin,
+  Building,
+  Clock,
+  AlertTriangle
+} from 'lucide-react';
+import { InventoryService, MarketplaceService, PharmaceuticalService } from '@/lib/services';
+import {
+  Inventory,
+  Inquiry,
+  CreateInquiryRequest,
+  Manufacturer,
+  Category,
+  INVENTORY_STATUS
+} from '@/types/pharmaceutical';
+import { toast } from 'react-toastify';
+
+export default function MarketplacePage() {
+  const { user } = useAuth();
+  const [marketplaceInventory, setMarketplaceInventory] = useState<Inventory[]>([]);
+  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isInquiryDialogOpen, setIsInquiryDialogOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<Inventory | null>(null);
+
+  // Search and filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedManufacturer, setSelectedManufacturer] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [minQuantity, setMinQuantity] = useState('');
+
+  // Inquiry form state
+  const [inquiryForm, setInquiryForm] = useState<CreateInquiryRequest>({
+    inventory_id: '',
+    quantity_requested: 0,
+    message: '',
+  });
+
+  useEffect(() => {
+    loadMarketplaceData();
+  }, [searchTerm, selectedManufacturer, selectedCategory, maxPrice, minQuantity]);
+
+  const loadMarketplaceData = async () => {
+    try {
+      setIsLoading(true);
+
+      // Load search parameters
+      const searchParams: any = {
+        search: searchTerm || undefined,
+        manufacturer: selectedManufacturer !== 'all' ? selectedManufacturer : undefined,
+        category: selectedCategory !== 'all' ? selectedCategory : undefined,
+        max_price: maxPrice || undefined,
+        min_quantity: minQuantity ? parseInt(minQuantity) : undefined,
+        available_only: true,
+        limit: 50,
+      };
+
+      const [inventoryData, manufacturersData, categoriesData] = await Promise.all([
+        InventoryService.searchMarketplaceInventory(searchParams),
+        PharmaceuticalService.getManufacturers(),
+        PharmaceuticalService.getCategories(),
+      ]);
+
+      setMarketplaceInventory(inventoryData);
+      setManufacturers(manufacturersData);
+      setCategories(categoriesData);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load marketplace data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateInquiry = async () => {
+    if (!selectedItem) return;
+
+    try {
+      // Prepare the inquiry data, sending undefined for empty message
+      const inquiryData = {
+        ...inquiryForm,
+        message: inquiryForm.message?.trim() || undefined,
+      };
+
+      const inquiry = await MarketplaceService.createInquiry(inquiryData);
+      setIsInquiryDialogOpen(false);
+      setSelectedItem(null);
+      setInquiryForm({
+        inventory_id: '',
+        quantity_requested: 0,
+        message: '',
+      });
+      toast.success('Inquiry sent successfully!');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to send inquiry');
+    }
+  };
+
+  const openInquiryDialog = (item: Inventory) => {
+    setSelectedItem(item);
+    setInquiryForm({
+      inventory_id: item.id,
+      quantity_requested: Math.max(1, Math.min(item.quantity, 1)), // Ensure at least 1, but don't exceed available
+      message: '',
+    });
+    setIsInquiryDialogOpen(true);
+  };
+
+  const getDaysUntilExpiry = (expiryDate: string) => {
+    const today = new Date();
+    const expiry = new Date(expiryDate);
+    const diffTime = expiry.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getExpiryBadgeVariant = (days: number) => {
+    if (days <= 7) return 'destructive';
+    if (days <= 30) return 'secondary';
+    return 'outline';
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Marketplace</h1>
+            <p className="text-gray-600">Browse and inquire about available pharmaceutical inventory</p>
+          </div>
+        </div>
+
+        {/* Enhanced Marketplace Search */}
+        <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-100">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Marketplace Search</h2>
+              <p className="text-sm text-gray-600">Find pharmaceutical products from verified suppliers</p>
+            </div>
+            <Search className="h-8 w-8 text-purple-600" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
+            <div className="lg:col-span-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search by product name, manufacturer, or NDC..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 bg-white border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+            </div>
+            <Select value={selectedManufacturer} onValueChange={setSelectedManufacturer}>
+              <SelectTrigger className="bg-white border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                <SelectValue placeholder="All Manufacturers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Manufacturers</SelectItem>
+                {manufacturers.map((mfg) => (
+                  <SelectItem key={mfg.manufacturer} value={mfg.manufacturer}>
+                    {mfg.manufacturer} ({mfg.count})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="bg-white border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category.category} value={category.category}>
+                    {category.category} ({category.count})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button className="bg-purple-600 hover:bg-purple-700">
+              <Filter className="h-4 w-4 mr-2" />
+              Search
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="maxPrice" className="text-sm font-medium text-gray-700">Max Price</Label>
+              <div className="relative mt-1">
+                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="maxPrice"
+                  type="number"
+                  placeholder="0.00"
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(e.target.value)}
+                  className="pl-10 bg-white border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="minQuantity" className="text-sm font-medium text-gray-700">Min Quantity</Label>
+              <Input
+                id="minQuantity"
+                type="number"
+                placeholder="0"
+                value={minQuantity}
+                onChange={(e) => setMinQuantity(e.target.value)}
+                className="mt-1 bg-white border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Results */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Available Products ({marketplaceInventory.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {marketplaceInventory.length === 0 ? (
+              <div className="text-center py-8">
+                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
+                <p className="text-gray-600">
+                  Try adjusting your search filters or check back later for new listings
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {marketplaceInventory.map((item) => {
+                  const daysUntilExpiry = getDaysUntilExpiry(item.expiry_date);
+                  return (
+                    <div key={item.id} className="border rounded-lg p-6 hover:bg-gray-50 transition-colors">
+                      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <h3 className="text-lg font-medium text-gray-900 mb-1">
+                                {item.pharmaceutical?.brand_name}
+                              </h3>
+                              <p className="text-sm text-gray-600 mb-2">
+                                {item.pharmaceutical?.generic_name} • {item.pharmaceutical?.strength} • {item.pharmaceutical?.dosage_form}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                                <div className="flex items-center">
+                                  <Building className="h-4 w-4 mr-1" />
+                                  {item.pharmaceutical?.manufacturer}
+                                </div>
+                                <div className="flex items-center">
+                                  <MapPin className="h-4 w-4 mr-1" />
+                                  {item.storage_location || 'Location not specified'}
+                                </div>
+                                <div className="flex items-center">
+                                  <Package className="h-4 w-4 mr-1" />
+                                  Batch: {item.batch_number}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-4 lg:mt-0 lg:ml-6">
+                              <Badge variant="outline">
+                                Sold by: {item.seller?.company_name}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-6 lg:mt-0 lg:ml-8 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                          <div className="text-right">
+                            <div className="text-2xl font-bold text-gray-900">
+                              ${parseFloat(item.unit_price).toFixed(2)}
+                            </div>
+                            <div className="text-sm text-gray-500">per unit</div>
+                          </div>
+
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-gray-900">
+                              {item.quantity} units
+                            </div>
+                            <div className="text-sm text-gray-500">available</div>
+                          </div>
+
+                          <div className="flex flex-col items-center">
+                            <div className="flex items-center text-sm mb-2">
+                              <Calendar className="h-4 w-4 mr-1" />
+                              {item.expiry_date}
+                            </div>
+                            <Badge variant={getExpiryBadgeVariant(daysUntilExpiry)}>
+                              {daysUntilExpiry > 0 ? `${daysUntilExpiry} days` : 'Expired'}
+                            </Badge>
+                          </div>
+
+                          <Button
+                            onClick={() => openInquiryDialog(item)}
+                            disabled={item.quantity === 0 || item.user_id === user?.id}
+                            className="whitespace-nowrap"
+                            title={item.user_id === user?.id ? "Cannot inquire about your own inventory" : ""}
+                          >
+                            <MessageSquare className="h-4 w-4 mr-2" />
+                            {item.user_id === user?.id ? "Your Item" : "Make Inquiry"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {item.quantity < 10 && (
+                        <Alert className="mt-4">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            Low stock - only {item.quantity} units remaining
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Inquiry Dialog */}
+        <Dialog open={isInquiryDialogOpen} onOpenChange={setIsInquiryDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Make an Inquiry</DialogTitle>
+            </DialogHeader>
+            {selectedItem && (
+              <div className="space-y-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-gray-900">
+                    {selectedItem.pharmaceutical?.brand_name}
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    {selectedItem.pharmaceutical?.generic_name}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Available: {selectedItem.quantity} units @ ${parseFloat(selectedItem.unit_price).toFixed(2)} each
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="quantity_requested">Quantity Requested</Label>
+                  <Input
+                    id="quantity_requested"
+                    type="number"
+                    min={1}
+                    max={selectedItem.quantity}
+                    value={inquiryForm.quantity_requested}
+                    onChange={(e) => setInquiryForm({
+                      ...inquiryForm,
+                      quantity_requested: parseInt(e.target.value) || 0
+                    })}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum available: {selectedItem.quantity} units
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="message">Message (Optional)</Label>
+                  <Textarea
+                    id="message"
+                    value={inquiryForm.message}
+                    onChange={(e) => setInquiryForm({ ...inquiryForm, message: e.target.value })}
+                    placeholder="Add any questions or special requirements..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex space-x-3">
+                  <Button onClick={handleCreateInquiry} className="flex-1">
+                    Send Inquiry
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsInquiryDialogOpen(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </DashboardLayout>
+  );
+}

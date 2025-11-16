@@ -1,0 +1,370 @@
+{
+  "info": {
+    "name": "Atlas Pharma - ERP Integration",
+    "description": "Test suite for Oracle NetSuite and SAP S/4HANA integration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "connection_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"erp-test@example.com\",\n  \"password\": \"Test123!@#\",\n  \"full_name\": \"ERP Test User\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "pm.collectionVariables.set(\"token\", response.token || response.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"erp-test@example.com\",\n  \"password\": \"Test123!@#\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ERP Connections",
+      "item": [
+        {
+          "name": "Create NetSuite Connection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const response = pm.response.json();",
+                  "pm.collectionVariables.set(\"connection_id\", response.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"connection_name\": \"Test NetSuite Connection\",\n  \"erp_type\": \"netsuite\",\n  \"netsuite_account_id\": \"TEST_ACCOUNT_123\",\n  \"netsuite_consumer_key\": \"test_consumer_key_abc123\",\n  \"netsuite_consumer_secret\": \"test_consumer_secret_xyz789\",\n  \"netsuite_token_id\": \"test_token_id_456\",\n  \"netsuite_token_secret\": \"test_token_secret_789\",\n  \"netsuite_realm\": \"TEST_REALM\",\n  \"sync_enabled\": true,\n  \"sync_frequency_minutes\": 60,\n  \"sync_stock_levels\": true,\n  \"sync_product_master\": true,\n  \"sync_transactions\": false,\n  \"sync_lot_batch\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections"]
+            }
+          }
+        },
+        {
+          "name": "Create SAP Connection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"connection_name\": \"Test SAP S/4HANA Connection\",\n  \"erp_type\": \"sap_s4hana\",\n  \"sap_base_url\": \"https://test-sap.example.com\",\n  \"sap_client_id\": \"test_sap_client_123\",\n  \"sap_client_secret\": \"test_sap_secret_abc456\",\n  \"sap_token_endpoint\": \"https://test-sap.example.com/oauth/token\",\n  \"sap_environment\": \"TEST\",\n  \"sap_plant\": \"1000\",\n  \"sap_company_code\": \"1000\",\n  \"sync_enabled\": true,\n  \"sync_frequency_minutes\": 30,\n  \"sync_stock_levels\": true,\n  \"sync_product_master\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections"]
+            }
+          }
+        },
+        {
+          "name": "List Connections",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections"]
+            }
+          }
+        },
+        {
+          "name": "Get Connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections/{{connection_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections", "{{connection_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Test Connection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections/{{connection_id}}/test",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections", "{{connection_id}}", "test"]
+            }
+          }
+        },
+        {
+          "name": "Delete Connection",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections/{{connection_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections", "{{connection_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sync Operations",
+      "item": [
+        {
+          "name": "Trigger Sync - Atlas to ERP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections/{{connection_id}}/sync?direction=atlas_to_erp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections", "{{connection_id}}", "sync"],
+              "query": [
+                {
+                  "key": "direction",
+                  "value": "atlas_to_erp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Trigger Sync - ERP to Atlas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections/{{connection_id}}/sync?direction=erp_to_atlas",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections", "{{connection_id}}", "sync"],
+              "query": [
+                {
+                  "key": "direction",
+                  "value": "erp_to_atlas"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Trigger Sync - Bidirectional",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections/{{connection_id}}/sync?direction=bidirectional",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections", "{{connection_id}}", "sync"],
+              "query": [
+                {
+                  "key": "direction",
+                  "value": "bidirectional"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Sync Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections/{{connection_id}}/sync-logs",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections", "{{connection_id}}", "sync-logs"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory Mappings",
+      "item": [
+        {
+          "name": "Get Mappings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections/{{connection_id}}/mappings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections", "{{connection_id}}", "mappings"]
+            }
+          }
+        },
+        {
+          "name": "Auto-Discover Mappings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/erp/connections/{{connection_id}}/auto-discover",
+              "host": ["{{base_url}}"],
+              "path": ["api", "erp", "connections", "{{connection_id}}", "auto-discover"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

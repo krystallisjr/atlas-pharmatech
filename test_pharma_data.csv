@@ -1,0 +1,6 @@
+product_name,sku,quantity,price,expiry_date,supplier
+Aspirin 500mg,ASP-500-001,1500,12.99,2026-12-31,PharmaCorp Inc
+Ibuprofen 200mg,IBU-200-002,3200,8.49,2027-06-15,MediSupply Co
+Amoxicillin 250mg,AMX-250-003,850,24.99,2025-11-30,BioMed Solutions
+Vitamin D3 1000IU,VIT-D3-004,5000,6.99,2028-03-20,HealthPlus Ltd
+Metformin 500mg,MET-500-005,2400,15.49,2026-08-10,GlobalPharma Inc
