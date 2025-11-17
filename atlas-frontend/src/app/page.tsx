@@ -117,7 +117,7 @@ export default function HomePage() {
                 </CardHeader>
                 <CardContent>
                   <CardDescription>
-                    JWT authentication, AES-256 encryption, comprehensive audit trails, and role-based access control for secure pharmaceutical operations.
+                    Built for regulatory compliance with SOC 2, HIPAA, and ISO 27001 standards. Complete audit trails, FDA data integration, and secure document management.
                   </CardDescription>
                 </CardContent>
               </Card>
