@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use crate::middleware::error_handling::{Result, AppError};
 use crate::services::claude_ai_service::{ClaudeAIService, ClaudeRequestConfig, user_message};
 use crate::services::erp::{ErpConnection, ErpType, ConnectionStatus, ConflictResolution};
-use crate::services::erp::erp_connection_service::SyncDirection;
+use crate::services::erp::erp_connection_service::{SyncDirection, ErpConnectionService};
+use crate::services::erp::netsuite_client::{NetSuiteClient, NetSuiteSearchParams, NetSuiteError};
+use crate::services::erp::sap_client::{SapClient, SapError};
 use std::collections::HashMap;
 use rust_decimal::Decimal;
 
@@ -214,6 +216,7 @@ pub struct ConflictData {
 pub struct ErpAiAssistantService {
     db_pool: PgPool,
     claude_service: ClaudeAIService,
+    connection_service: ErpConnectionService,
 }
 
 // Helper struct for sync log database queries
@@ -232,9 +235,11 @@ struct SyncLogRow {
 impl ErpAiAssistantService {
     pub fn new(db_pool: PgPool, claude_api_key: String) -> Self {
         let claude_service = ClaudeAIService::new(claude_api_key, db_pool.clone());
+        let connection_service = ErpConnectionService::new(db_pool.clone());
         Self {
             db_pool,
             claude_service,
+            connection_service,
         }
     }
 
@@ -596,46 +601,18 @@ For each conflict, recommend resolution with confidence and risk assessment."#,
     // ========================================================================
 
     async fn get_connection(&self, connection_id: Uuid, user_id: Uuid) -> Result<ErpConnection> {
-        let row = sqlx::query!(
-            r#"
-            SELECT id, user_id, connection_name, erp_type, created_at, updated_at
-            FROM erp_connections
-            WHERE id = $1 AND user_id = $2
-            "#,
-            connection_id,
-            user_id
-        )
-        .fetch_optional(&self.db_pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound("ERP connection not found".to_string()))?;
+        // Get connection with full credentials from connection service
+        let connection = self.connection_service
+            .get_connection_by_id(connection_id)
+            .await
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to get ERP connection: {:?}", e)))?;
 
-        Ok(ErpConnection {
-            id: row.id,
-            user_id: row.user_id,
-            connection_name: row.connection_name,
-            erp_type: ErpType::from_str(&row.erp_type)
-                .map_err(|e| AppError::Internal(anyhow::anyhow!("Invalid ERP type: {:?}", e)))?,
-            status: ConnectionStatus::Active,
-            // Credentials not needed for AI analysis
-            netsuite_config: None,
-            sap_config: None,
-            // Sync configuration defaults
-            sync_enabled: true,
-            sync_frequency_minutes: 60,
-            last_sync_at: None,
-            last_sync_status: None,
-            // Feature flags defaults
-            sync_stock_levels: true,
-            sync_product_master: true,
-            sync_transactions: true,
-            sync_lot_batch: true,
-            // Sync direction defaults
-            default_sync_direction: SyncDirection::Bidirectional,
-            conflict_resolution: ConflictResolution::Manual,
-            // Metadata
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-        })
+        // Verify ownership
+        if connection.user_id != user_id {
+            return Err(AppError::Forbidden("Access denied to this ERP connection".to_string()));
+        }
+
+        Ok(connection)
     }
 
     async fn get_atlas_inventory(&self, user_id: Uuid, limit: i64) -> Result<Vec<AtlasInventoryItem>> {
@@ -683,20 +660,190 @@ For each conflict, recommend resolution with confidence and risk assessment."#,
         }).collect())
     }
 
-    async fn fetch_erp_inventory(&self, _connection: &ErpConnection) -> Result<Vec<ErpInventoryItem>> {
-        // TODO: Implement actual ERP API calls
-        // For now, return mock data for development
-        Ok(vec![
+    async fn fetch_erp_inventory(&self, connection: &ErpConnection) -> Result<Vec<ErpInventoryItem>> {
+        tracing::info!("Fetching real inventory from {} ERP", connection.erp_type.as_str());
+
+        match connection.erp_type {
+            ErpType::NetSuite => self.fetch_netsuite_inventory(connection).await,
+            ErpType::SapS4Hana => self.fetch_sap_inventory(connection).await,
+        }
+    }
+
+    /// Fetch inventory from NetSuite via SuiteTalk REST API
+    async fn fetch_netsuite_inventory(&self, connection: &ErpConnection) -> Result<Vec<ErpInventoryItem>> {
+        let netsuite_config = connection.netsuite_config.as_ref()
+            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("NetSuite credentials not found")))?;
+
+        // Create NetSuite client
+        let client = NetSuiteClient::new(netsuite_config.clone())
+            .map_err(|e| self.map_netsuite_error(e))?;
+
+        // Search for inventory items (limit to 1000 for performance)
+        let search_params = NetSuiteSearchParams {
+            q: None, // Get all inventory items
+            limit: Some(1000),
+            offset: Some(0),
+            fields: Some(vec![
+                "id".to_string(),
+                "itemId".to_string(),
+                "displayName".to_string(),
+                "quantityOnHand".to_string(),
+                "custitem_ndc_code".to_string(),
+                "custitem_lot_number".to_string(),
+                "custitem_expiry_date".to_string(),
+                "description".to_string(),
+                "manufacturer".to_string(),
+            ]),
+        };
+
+        tracing::info!("Calling NetSuite inventory search API...");
+        let search_result = client.search_inventory(search_params).await
+            .map_err(|e| self.map_netsuite_error(e))?;
+
+        tracing::info!("NetSuite returned {} inventory items", search_result.items.len());
+
+        // Transform NetSuite items to generic ERP inventory items
+        let erp_items = search_result.items.into_iter().map(|ns_item| {
+            let mut custom_fields = HashMap::new();
+
+            // Add NDC code if present
+            if let Some(ndc) = ns_item.ndc_code {
+                custom_fields.insert("ndc_code".to_string(), ndc);
+            }
+
+            // Add lot number if present
+            if let Some(lot) = ns_item.lot_number {
+                custom_fields.insert("lot_number".to_string(), lot);
+            }
+
+            // Add expiry date if present
+            if let Some(expiry) = ns_item.expiry_date {
+                custom_fields.insert("expiry_date".to_string(), expiry);
+            }
+
+            // Add manufacturer if present
+            if let Some(ref mfg) = ns_item.manufacturer {
+                custom_fields.insert("manufacturer".to_string(), mfg.name.clone());
+            }
+
             ErpInventoryItem {
-                id: "ITEM_001".to_string(),
-                name: "Acetaminophen 500mg Tablets".to_string(),
-                description: Some("Pain reliever".to_string()),
-                quantity: 1000.0,
-                custom_fields: HashMap::from([
-                    ("ndc_code".to_string(), "00045-0001-60".to_string()),
-                ]),
+                id: ns_item.id,
+                name: ns_item.display_name,
+                description: ns_item.description,
+                quantity: ns_item.quantity_on_hand.unwrap_or(0.0),
+                custom_fields,
+            }
+        }).collect();
+
+        Ok(erp_items)
+    }
+
+    /// Fetch inventory from SAP via OData API
+    async fn fetch_sap_inventory(&self, connection: &ErpConnection) -> Result<Vec<ErpInventoryItem>> {
+        let sap_config = connection.sap_config.as_ref()
+            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("SAP credentials not found")))?;
+
+        // Create SAP client
+        let client = SapClient::new(sap_config.clone())
+            .map_err(|e| self.map_sap_error(e))?;
+
+        tracing::info!("Fetching SAP product master data...");
+
+        // For SAP, we need to search products and then get their stock
+        // This is a simplified approach - in production you might want pagination
+        let products = client.search_products("").await // Empty search gets all products (limited by SAP)
+            .map_err(|e| self.map_sap_error(e))?;
+
+        tracing::info!("SAP returned {} products, fetching stock data...", products.len());
+
+        let mut erp_items = Vec::new();
+
+        // For each product, get stock information
+        for product in products.into_iter().take(1000) { // Limit to 1000 for performance
+            // Get stock for all locations
+            let stock_result = client.get_material_stock_all_locations(&product.product).await;
+
+            match stock_result {
+                Ok(stock_locations) => {
+                    // Calculate total quantity across all locations
+                    let total_quantity: f64 = stock_locations.iter()
+                        .filter_map(|loc| loc.stock_quantity.parse::<f64>().ok())
+                        .sum();
+
+                    let mut custom_fields = HashMap::new();
+
+                    // Add manufacturer if present
+                    if let Some(mfg) = product.manufacturer {
+                        custom_fields.insert("manufacturer".to_string(), mfg);
+                    }
+
+                    // Add product group if present
+                    if let Some(group) = product.product_group {
+                        custom_fields.insert("product_group".to_string(), group);
+                    }
+
+                    // Add base unit
+                    custom_fields.insert("base_unit".to_string(), product.base_unit.clone());
+
+                    erp_items.push(ErpInventoryItem {
+                        id: product.product.clone(),
+                        name: product.product, // SAP uses material number as name
+                        description: product.description,
+                        quantity: total_quantity,
+                        custom_fields,
+                    });
+                }
+                Err(e) => {
+                    // Log error but continue processing other products
+                    tracing::warn!("Failed to get stock for product {}: {:?}", product.product, e);
+                    // Still add the product with zero quantity
+                    erp_items.push(ErpInventoryItem {
+                        id: product.product.clone(),
+                        name: product.product,
+                        description: product.description,
+                        quantity: 0.0,
+                        custom_fields: HashMap::new(),
+                    });
+                }
+            }
+        }
+
+        tracing::info!("SAP inventory fetch complete: {} items with stock data", erp_items.len());
+
+        Ok(erp_items)
+    }
+
+    /// Map NetSuite errors to AppError
+    fn map_netsuite_error(&self, error: NetSuiteError) -> AppError {
+        match error {
+            NetSuiteError::AuthError(msg) => {
+                tracing::error!("NetSuite authentication failed: {}", msg);
+                AppError::Unauthorized
             },
-        ])
+            NetSuiteError::RateLimitExceeded => AppError::TooManyRequests("NetSuite API rate limit exceeded. Please try again later.".to_string()),
+            NetSuiteError::NotFound(msg) => AppError::NotFound(format!("NetSuite resource not found: {}", msg)),
+            NetSuiteError::ApiError(status, msg) => AppError::Internal(anyhow::anyhow!("NetSuite API error ({}): {}", status, msg)),
+            NetSuiteError::NetworkError(e) => AppError::Internal(anyhow::anyhow!("NetSuite network error: {}", e)),
+            NetSuiteError::ConfigError(msg) => AppError::BadRequest(format!("NetSuite configuration error: {}", msg)),
+            _ => AppError::Internal(anyhow::anyhow!("NetSuite error: {:?}", error)),
+        }
+    }
+
+    /// Map SAP errors to AppError
+    fn map_sap_error(&self, error: SapError) -> AppError {
+        match error {
+            SapError::AuthError(msg) => {
+                tracing::error!("SAP authentication failed: {}", msg);
+                AppError::Unauthorized
+            },
+            SapError::RateLimitExceeded => AppError::TooManyRequests("SAP API rate limit exceeded. Please try again later.".to_string()),
+            SapError::NotFound(msg) => AppError::NotFound(format!("SAP resource not found: {}", msg)),
+            SapError::ApiError(status, msg) => AppError::Internal(anyhow::anyhow!("SAP API error ({}): {}", status, msg)),
+            SapError::NetworkError(e) => AppError::Internal(anyhow::anyhow!("SAP network error: {}", e)),
+            SapError::ConfigError(msg) => AppError::BadRequest(format!("SAP configuration error: {}", msg)),
+            SapError::ODataError(msg) => AppError::Internal(anyhow::anyhow!("SAP OData error: {}", msg)),
+            _ => AppError::Internal(anyhow::anyhow!("SAP error: {:?}", error)),
+        }
     }
 
     async fn save_mapping_suggestion(&self, connection_id: Uuid, suggestion: &MappingSuggestion) -> Result<()> {

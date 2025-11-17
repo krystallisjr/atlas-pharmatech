@@ -21,7 +21,8 @@ import {
   Sparkles,
   Shield,
   Moon,
-  Sun
+  Sun,
+  Plug
 } from 'lucide-react';
 import { ProtectedRoute } from './protected-route';
 import { AiAssistantSidebar } from './ai-assistant-sidebar';
@@ -36,6 +37,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'My Inventory', href: '/dashboard/inventory', icon: Package },
   { name: 'AI Import', href: '/dashboard/ai-import', icon: Sparkles },
+  { name: 'ERP Integration', href: '/dashboard/erp', icon: Plug },
   { name: 'Regulatory AI', href: '/dashboard/regulatory', icon: Shield },
   { name: 'Marketplace', href: '/dashboard/marketplace', icon: Store },
   { name: 'Pharmaceuticals', href: '/dashboard/pharmaceuticals', icon: Package },

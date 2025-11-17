@@ -7,3 +7,4 @@ export { AiImportService } from './ai-import-service';
 export { NlQueryService } from './nl-query-service';
 export { InquiryAssistantService } from './inquiry-assistant-service';
 export { MfaService } from './mfa-service';
+export { ErpService } from './erp-service';
