@@ -109,7 +109,7 @@ export class ErpService {
    * Get AI analysis of a failed sync
    * Returns plain-English error explanation and recommendations
    */
-  static async getSync Analysis(syncLogId: string): Promise<SyncInsight> {
+  static async getSyncAnalysis(syncLogId: string): Promise<SyncInsight> {
     const response = await apiClient.get<SyncInsight>(
       `/api/erp/sync-logs/${syncLogId}/ai-analysis`
     );
