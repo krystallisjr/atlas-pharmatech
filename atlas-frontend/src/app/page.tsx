@@ -30,7 +30,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">Atlas Pharma</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Atlas PharmaTech</h1>
             </div>
             <div className="flex items-center space-x-4">
               <Link href="/login">
@@ -117,7 +117,7 @@ export default function HomePage() {
                 </CardHeader>
                 <CardContent>
                   <CardDescription>
-                    DEA-compliant tracking, audit trails, and secure transactions for regulated pharmaceutical trading.
+                    JWT authentication, AES-256 encryption, comprehensive audit trails, and role-based access control for secure pharmaceutical operations.
                   </CardDescription>
                 </CardContent>
               </Card>
@@ -150,7 +150,7 @@ export default function HomePage() {
               <div className="mt-8">
                 <Link href="/register">
                   <Button size="lg" variant="secondary">
-                    Get Started Free
+                    Get Started
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
@@ -165,7 +165,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <p className="text-base text-gray-500">
-              &copy; 2024 Atlas Pharma. Built for the pharmaceutical industry.
+              &copy; 2024 Atlas PharmaTech. Built for the pharmaceutical industry.
             </p>
           </div>
         </div>
