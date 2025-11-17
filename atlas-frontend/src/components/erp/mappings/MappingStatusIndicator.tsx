@@ -16,18 +16,23 @@ export function MappingStatusIndicator({
   percentage,
   suggested,
 }: MappingStatusIndicatorProps) {
+  const safePercentage = percentage ?? 0;
+  const safeMapped = mapped ?? 0;
+  const safeTotal = total ?? 0;
+  const safeSuggested = suggested ?? 0;
+
   // Determine progress color
   const getProgressColor = () => {
-    if (percentage >= 90) return 'bg-green-600';
-    if (percentage >= 70) return 'bg-blue-600';
-    if (percentage >= 40) return 'bg-yellow-600';
+    if (safePercentage >= 90) return 'bg-green-600';
+    if (safePercentage >= 70) return 'bg-blue-600';
+    if (safePercentage >= 40) return 'bg-yellow-600';
     return 'bg-gray-600';
   };
 
   const getProgressGradient = () => {
-    if (percentage >= 90) return 'from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20';
-    if (percentage >= 70) return 'from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20';
-    if (percentage >= 40) return 'from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20';
+    if (safePercentage >= 90) return 'from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20';
+    if (safePercentage >= 70) return 'from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20';
+    if (safePercentage >= 40) return 'from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20';
     return 'from-gray-50 to-slate-50 dark:from-gray-800 dark:to-slate-800';
   };
 
@@ -41,7 +46,7 @@ export function MappingStatusIndicator({
               Mapping Progress
             </h3>
             <span className="text-3xl font-bold text-gray-900 dark:text-white">
-              {percentage.toFixed(0)}%
+              {safePercentage.toFixed(0)}%
             </span>
           </div>
 
@@ -49,7 +54,7 @@ export function MappingStatusIndicator({
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 mb-3 overflow-hidden">
             <div
               className={`h-4 ${getProgressColor()} transition-all duration-1000 ease-out rounded-full`}
-              style={{ width: `${Math.min(percentage, 100)}%` }}
+              style={{ width: `${Math.min(safePercentage, 100)}%` }}
             >
               <div className="h-full w-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
             </div>
@@ -57,10 +62,10 @@ export function MappingStatusIndicator({
 
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-600 dark:text-gray-400">
-              {mapped} of {total} products mapped
+              {safeMapped} of {safeTotal} products mapped
             </span>
             <span className="text-gray-600 dark:text-gray-400">
-              {total - mapped} remaining
+              {safeTotal - safeMapped} remaining
             </span>
           </div>
         </div>
@@ -74,7 +79,7 @@ export function MappingStatusIndicator({
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {mapped}
+                {safeMapped}
               </p>
               <p className="text-xs text-gray-600 dark:text-gray-400">
                 Mapped Products
@@ -83,14 +88,14 @@ export function MappingStatusIndicator({
           </div>
 
           {/* AI Suggestions Count */}
-          {suggested > 0 && (
+          {safeSuggested > 0 && (
             <div className="flex items-center gap-3 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
               <div className="flex items-center justify-center w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900">
                 <Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {suggested}
+                  {safeSuggested}
                 </p>
                 <p className="text-xs text-purple-700 dark:text-purple-300 font-medium">
                   AI Suggestions
@@ -102,7 +107,7 @@ export function MappingStatusIndicator({
       </div>
 
       {/* Completion Message */}
-      {percentage >= 100 && (
+      {safePercentage >= 100 && (
         <div className="mt-6 p-4 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-300 dark:border-green-700">
           <div className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -114,7 +119,7 @@ export function MappingStatusIndicator({
       )}
 
       {/* Low Progress Warning */}
-      {percentage < 40 && total > 0 && (
+      {safePercentage < 40 && safeTotal > 0 && (
         <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />

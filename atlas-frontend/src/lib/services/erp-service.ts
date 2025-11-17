@@ -33,17 +33,17 @@ export class ErpService {
       '/api/erp/connections',
       data
     );
-    return response.data;
+    return response;
   }
 
   /**
    * Get all ERP connections for current user
    */
   static async listConnections(): Promise<ErpConnection[]> {
-    const response = await apiClient.get<ErpConnection[]>(
+    const response = await apiClient.get<{ connections: ErpConnection[], total: number }>(
       '/api/erp/connections'
     );
-    return response.data;
+    return response?.connections || [];
   }
 
   /**
@@ -53,7 +53,7 @@ export class ErpService {
     const response = await apiClient.get<ErpConnection>(
       `/api/erp/connections/${connectionId}`
     );
-    return response.data;
+    return response;
   }
 
   /**
@@ -74,7 +74,7 @@ export class ErpService {
       `/api/erp/connections/${connectionId}/test`,
       {}
     );
-    return response.data;
+    return response;
   }
 
   // ============================================================================
@@ -92,7 +92,7 @@ export class ErpService {
       `/api/erp/connections/${connectionId}/sync`,
       request || {}
     );
-    return response.data;
+    return response;
   }
 
   /**
@@ -102,7 +102,7 @@ export class ErpService {
     const response = await apiClient.get<SyncLog[]>(
       `/api/erp/connections/${connectionId}/sync-logs`
     );
-    return response.data;
+    return response || [];
   }
 
   /**
@@ -113,7 +113,7 @@ export class ErpService {
     const response = await apiClient.get<SyncInsight>(
       `/api/erp/sync-logs/${syncLogId}/ai-analysis`
     );
-    return response.data;
+    return response;
   }
 
   // ============================================================================
@@ -127,7 +127,7 @@ export class ErpService {
     const response = await apiClient.get<InventoryMapping[]>(
       `/api/erp/connections/${connectionId}/mappings`
     );
-    return response.data;
+    return response || [];
   }
 
   /**
@@ -144,7 +144,7 @@ export class ErpService {
     const response = await apiClient.get<MappingStatus>(
       `/api/erp/connections/${connectionId}/mapping-status`
     );
-    return response.data;
+    return response;
   }
 
   // ============================================================================
@@ -163,7 +163,7 @@ export class ErpService {
       `/api/erp/connections/${connectionId}/auto-discover-mappings`,
       {}
     );
-    return response.data;
+    return response;
   }
 
   /**
@@ -175,7 +175,7 @@ export class ErpService {
     const response = await apiClient.get<MappingSuggestion[]>(
       `/api/erp/connections/${connectionId}/mapping-suggestions`
     );
-    return response.data;
+    return response || [];
   }
 
   /**
@@ -190,7 +190,7 @@ export class ErpService {
       `/api/erp/connections/${connectionId}/mapping-suggestions/${suggestionId}/review`,
       request
     );
-    return response.data;
+    return response;
   }
 
   /**
@@ -206,7 +206,7 @@ export class ErpService {
       `/api/erp/connections/${connectionId}/resolve-conflicts`,
       request
     );
-    return response.data;
+    return response;
   }
 
   // ============================================================================

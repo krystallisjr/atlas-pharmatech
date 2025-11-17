@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plug, RefreshCw, Trash2, Loader2, Sparkles, Database, History } from 'lucide-react';
@@ -13,7 +13,8 @@ import type { ErpConnection, MappingStatus } from '@/types/erp';
 import { ERP_SYSTEMS } from '@/types/erp';
 import { toast } from 'react-toastify';
 
-export default function ErpConnectionDetailsPage({ params }: { params: { id: string } }) {
+export default function ErpConnectionDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [connection, setConnection] = useState<ErpConnection | null>(null);
   const [mappingStatus, setMappingStatus] = useState<MappingStatus | null>(null);
@@ -23,14 +24,14 @@ export default function ErpConnectionDetailsPage({ params }: { params: { id: str
   useEffect(() => {
     loadConnection();
     loadMappingStatus();
-  }, [params.id]);
+  }, [id]);
 
   const loadConnection = async () => {
     try {
-      const data = await ErpService.getConnection(params.id);
+      const data = await ErpService.getConnection(id);
       setConnection(data);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to load connection');
+      console.error('Failed to load connection:', error);
       router.push('/dashboard/erp');
     } finally {
       setLoading(false);
@@ -39,7 +40,7 @@ export default function ErpConnectionDetailsPage({ params }: { params: { id: str
 
   const loadMappingStatus = async () => {
     try {
-      const status = await ErpService.getMappingStatus(params.id);
+      const status = await ErpService.getMappingStatus(id);
       setMappingStatus(status);
     } catch (error: any) {
       console.error('Failed to load mapping status:', error);
@@ -53,7 +54,7 @@ export default function ErpConnectionDetailsPage({ params }: { params: { id: str
 
     setDeleting(true);
     try {
-      await ErpService.deleteConnection(params.id);
+      await ErpService.deleteConnection(id);
       toast.success('Connection deleted successfully');
       router.push('/dashboard/erp');
     } catch (error: any) {
@@ -191,10 +192,10 @@ export default function ErpConnectionDetailsPage({ params }: { params: { id: str
             <History className="h-5 w-5 text-indigo-600" />
           </div>
           <div className="text-lg font-bold text-gray-900 dark:text-white capitalize">
-            {connection.default_sync_direction.replace('_', ' → ')}
+            {connection.default_sync_direction?.replace('_', ' → ') || 'Not configured'}
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            {connection.conflict_resolution}
+            {connection.conflict_resolution || 'Not configured'}
           </p>
         </Card>
       </div>
@@ -239,7 +240,7 @@ export default function ErpConnectionDetailsPage({ params }: { params: { id: str
               <div>
                 <label className="text-sm text-gray-600 dark:text-gray-400">Sync Frequency</label>
                 <p className="font-medium text-gray-900 dark:text-white mt-1">
-                  Every {connection.sync_frequency_minutes} minutes
+                  {connection.sync_frequency_minutes ? `Every ${connection.sync_frequency_minutes} minutes` : 'Not configured'}
                 </p>
               </div>
 

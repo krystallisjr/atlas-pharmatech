@@ -21,9 +21,10 @@ export default function ErpIntegrationPage() {
   const loadConnections = async () => {
     try {
       const data = await ErpService.listConnections();
-      setConnections(data);
+      setConnections(data || []);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to load ERP connections');
+      console.error('Failed to load ERP connections:', error);
+      setConnections([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -203,12 +204,14 @@ export default function ErpIntegrationPage() {
                     </div>
                   )}
 
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Sync Direction:</span>
-                    <span className="font-medium text-gray-900 dark:text-white capitalize">
-                      {connection.default_sync_direction.replace('_', ' → ')}
-                    </span>
-                  </div>
+                  {connection.default_sync_direction && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Sync Direction:</span>
+                      <span className="font-medium text-gray-900 dark:text-white capitalize">
+                        {connection.default_sync_direction.replace('_', ' → ')}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600 dark:text-gray-400">Auto-Sync:</span>

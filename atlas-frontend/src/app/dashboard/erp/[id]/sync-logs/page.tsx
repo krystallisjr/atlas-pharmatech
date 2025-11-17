@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCw, Filter, Loader2, Calendar } from 'lucide-react';
 import { ErpService } from '@/lib/services';
@@ -15,7 +15,8 @@ import { AiErrorAnalysis } from '@/components/erp/sync/AiErrorAnalysis';
 
 type StatusFilter = 'all' | 'completed' | 'failed' | 'partial' | 'in_progress' | 'pending';
 
-export default function SyncLogsPage({ params }: { params: { id: string } }) {
+export default function SyncLogsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [connection, setConnection] = useState<ErpConnection | null>(null);
   const [syncLogs, setSyncLogs] = useState<SyncLog[]>([]);
@@ -27,20 +28,21 @@ export default function SyncLogsPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     loadData();
-  }, [params.id]);
+  }, [id]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [connData, logsData] = await Promise.all([
-        ErpService.getConnection(params.id),
-        ErpService.getSyncLogs(params.id),
+        ErpService.getConnection(id),
+        ErpService.getSyncLogs(id),
       ]);
 
       setConnection(connData);
       setSyncLogs(logsData);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to load sync logs');
+      console.error('Failed to load sync logs:', error);
+      setSyncLogs([]);
       router.push('/dashboard/erp');
     } finally {
       setLoading(false);
@@ -50,11 +52,12 @@ export default function SyncLogsPage({ params }: { params: { id: string } }) {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const logsData = await ErpService.getSyncLogs(params.id);
+      const logsData = await ErpService.getSyncLogs(id);
       setSyncLogs(logsData);
       toast.success('Sync logs refreshed');
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to refresh sync logs');
+      console.error('Failed to refresh sync logs:', error);
+      setSyncLogs([]);
     } finally {
       setRefreshing(false);
     }
@@ -107,7 +110,7 @@ export default function SyncLogsPage({ params }: { params: { id: string } }) {
       <div className="mb-8">
         <Button
           variant="ghost"
-          onClick={() => router.push(`/dashboard/erp/${params.id}`)}
+          onClick={() => router.push(`/dashboard/erp/${id}`)}
           className="gap-2 mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -137,7 +140,7 @@ export default function SyncLogsPage({ params }: { params: { id: string } }) {
             </Button>
 
             <SyncTriggerButton
-              connectionId={params.id}
+              connectionId={id}
               onSyncComplete={handleSyncComplete}
             />
           </div>
@@ -257,7 +260,7 @@ export default function SyncLogsPage({ params }: { params: { id: string } }) {
           </p>
           {statusFilter === 'all' && (
             <SyncTriggerButton
-              connectionId={params.id}
+              connectionId={id}
               onSyncComplete={handleSyncComplete}
             />
           )}
@@ -268,7 +271,7 @@ export default function SyncLogsPage({ params }: { params: { id: string } }) {
       {showAiAnalysis && selectedLogId && (
         <AiErrorAnalysis
           syncLogId={selectedLogId}
-          connectionId={params.id}
+          connectionId={id}
           onClose={() => {
             setShowAiAnalysis(false);
             setSelectedLogId(null);

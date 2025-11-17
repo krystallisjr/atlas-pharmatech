@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Sparkles, Filter, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { ErpService } from '@/lib/services';
@@ -17,7 +17,8 @@ import { MappingsTable } from '@/components/erp/mappings/MappingsTable';
 
 type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low';
 
-export default function MappingsPage({ params }: { params: { id: string } }) {
+export default function MappingsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [connection, setConnection] = useState<ErpConnection | null>(null);
   const [mappingStatus, setMappingStatus] = useState<MappingStatus | null>(null);
@@ -31,16 +32,16 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     loadData();
-  }, [params.id]);
+  }, [id]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [connData, statusData, suggestionsData, mappingsData] = await Promise.all([
-        ErpService.getConnection(params.id),
-        ErpService.getMappingStatus(params.id),
-        ErpService.getMappingSuggestions(params.id).catch(() => []),
-        ErpService.getMappings(params.id).catch(() => []),
+        ErpService.getConnection(id),
+        ErpService.getMappingStatus(id),
+        ErpService.getMappingSuggestions(id).catch(() => []),
+        ErpService.getMappings(id).catch(() => []),
       ]);
 
       setConnection(connData);
@@ -48,7 +49,9 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
       setSuggestions(suggestionsData);
       setApprovedMappings(mappingsData);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to load mappings');
+      console.error('Failed to load mappings:', error);
+      setSuggestions([]);
+      setApprovedMappings([]);
       router.push('/dashboard/erp');
     } finally {
       setLoading(false);
@@ -59,13 +62,14 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
     setSuggestionsLoading(true);
     try {
       const [suggestionsData, statusData] = await Promise.all([
-        ErpService.getMappingSuggestions(params.id),
-        ErpService.getMappingStatus(params.id),
+        ErpService.getMappingSuggestions(id),
+        ErpService.getMappingStatus(id),
       ]);
       setSuggestions(suggestionsData);
       setMappingStatus(statusData);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to load suggestions');
+      console.error('Failed to load suggestions:', error);
+      setSuggestions([]);
     } finally {
       setSuggestionsLoading(false);
     }
@@ -73,14 +77,14 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
 
   const handleApprove = async (suggestionId: string) => {
     try {
-      const mapping = await ErpService.reviewMappingSuggestion(suggestionId, 'approve');
+      const mapping = await ErpService.reviewMappingSuggestion(id, suggestionId, { action: 'approve' });
 
       // Remove from suggestions and add to approved
       setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
       setApprovedMappings(prev => [...prev, mapping]);
 
       // Update mapping status
-      const statusData = await ErpService.getMappingStatus(params.id);
+      const statusData = await ErpService.getMappingStatus(id);
       setMappingStatus(statusData);
 
       toast.success('Mapping approved successfully');
@@ -91,7 +95,7 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
 
   const handleReject = async (suggestionId: string) => {
     try {
-      await ErpService.reviewMappingSuggestion(suggestionId, 'reject');
+      await ErpService.reviewMappingSuggestion(id, suggestionId, { action: 'reject' });
 
       // Remove from suggestions
       setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
@@ -109,7 +113,7 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
     }
 
     const approvePromises = Array.from(selectedSuggestions).map(id =>
-      ErpService.reviewMappingSuggestion(id, 'approve')
+      ErpService.reviewMappingSuggestion(id, id, { action: 'approve' })
     );
 
     try {
@@ -134,7 +138,7 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
     }
 
     const rejectPromises = Array.from(selectedSuggestions).map(id =>
-      ErpService.reviewMappingSuggestion(id, 'reject')
+      ErpService.reviewMappingSuggestion(id, id, { action: 'reject' })
     );
 
     try {
@@ -162,7 +166,7 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
       setApprovedMappings(prev => prev.filter(m => m.id !== mappingId));
 
       // Update mapping status
-      const statusData = await ErpService.getMappingStatus(params.id);
+      const statusData = await ErpService.getMappingStatus(id);
       setMappingStatus(statusData);
 
       toast.success('Mapping deleted');
@@ -228,7 +232,7 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
       <div className="mb-8">
         <Button
           variant="ghost"
-          onClick={() => router.push(`/dashboard/erp/${params.id}`)}
+          onClick={() => router.push(`/dashboard/erp/${id}`)}
           className="gap-2 mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -246,7 +250,7 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
           </div>
 
           <AutoDiscoveryButton
-            connectionId={params.id}
+            connectionId={id}
             onDiscoveryComplete={handleDiscoveryComplete}
           />
         </div>
@@ -401,7 +405,7 @@ export default function MappingsPage({ params }: { params: { id: string } }) {
             between Atlas products and your ERP system.
           </p>
           <AutoDiscoveryButton
-            connectionId={params.id}
+            connectionId={id}
             onDiscoveryComplete={handleDiscoveryComplete}
           />
         </Card>
