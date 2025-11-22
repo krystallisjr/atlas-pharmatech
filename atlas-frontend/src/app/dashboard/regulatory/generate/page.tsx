@@ -126,7 +126,7 @@ export default function GenerateDocumentPage() {
         product_name: productName || undefined,
         batch_number: batchNumber || undefined,
         manufacturer: manufacturer || undefined,
-        test_results: testResults ? JSON.parse(testResults) : undefined,
+        test_results: testResults.trim() ? (() => { try { return JSON.parse(testResults); } catch { return undefined; } })() : undefined,
       };
 
       // Generate document
@@ -283,7 +283,7 @@ export default function GenerateDocumentPage() {
                 id="manufacturer"
                 value={manufacturer}
                 onChange={(e) => setManufacturer(e.target.value)}
-                placeholder="e.g., Atlas Pharma Corp"
+                placeholder="e.g., Pfizer"
                 className="mt-1"
               />
             </div>
@@ -479,13 +479,15 @@ export default function GenerateDocumentPage() {
               </p>
             </div>
 
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-gray-900 mb-2">Ed25519 Signature</h4>
-              <p className="font-mono text-xs bg-gray-100 p-2 rounded break-all">
-                {generatedDoc.generated_signature.substring(0, 64)}...
-              </p>
-              <p className="text-xs text-gray-500 mt-1">Algorithm: Ed25519 (FIPS 186-4)</p>
-            </div>
+            {generatedDoc.generated_signature && (
+              <div className="border-t pt-4">
+                <h4 className="font-semibold text-gray-900 mb-2">Ed25519 Signature</h4>
+                <p className="font-mono text-xs bg-gray-100 p-2 rounded break-all">
+                  {generatedDoc.generated_signature.substring(0, 64)}...
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Algorithm: Ed25519 (FIPS 186-4)</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

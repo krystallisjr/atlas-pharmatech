@@ -23,7 +23,7 @@ export function BackupCodesDisplay({ codes, onConfirm, isLoading = false }: Back
   const [confirmed, setConfirmed] = useState(false)
 
   const handleDownload = () => {
-    const content = `Atlas Pharma - MFA Backup Codes
+    const content = `Atlas PharmaTech - MFA Backup Codes
 Generated: ${new Date().toLocaleString()}
 
 IMPORTANT: Keep these codes safe and secure!
@@ -67,7 +67,7 @@ DO NOT share these codes with anyone.
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Atlas Pharma - MFA Backup Codes</title>
+          <title>Atlas PharmaTech - MFA Backup Codes</title>
           <style>
             body {
               font-family: 'Courier New', monospace;
@@ -108,7 +108,7 @@ DO NOT share these codes with anyone.
           </style>
         </head>
         <body>
-          <h1>🔐 Atlas Pharma - MFA Backup Codes</h1>
+          <h1>🔐 Atlas PharmaTech - MFA Backup Codes</h1>
           <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
 
           <div class="warning">

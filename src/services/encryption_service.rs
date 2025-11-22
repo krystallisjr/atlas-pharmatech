@@ -171,6 +171,63 @@ impl EncryptionService {
         hasher.update(plaintext.as_bytes());
         format!("{:x}", hasher.finalize())
     }
+
+    /// Encrypt binary data (for files like Excel, images, etc.)
+    ///
+    /// Returns base64-encoded string: nonce(12 bytes) || ciphertext || tag(16 bytes)
+    pub fn encrypt_bytes(&self, plaintext: &[u8]) -> Result<String> {
+        if plaintext.is_empty() {
+            return Ok(String::new());
+        }
+
+        // Generate unique 96-bit nonce (12 bytes)
+        let mut nonce_bytes = [0u8; 12];
+        rand::thread_rng().fill_bytes(&mut nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        // Encrypt binary data with authentication
+        let ciphertext = self
+            .cipher
+            .encrypt(nonce, plaintext)
+            .map_err(|e| EncryptionError::EncryptionFailed(e.to_string()))?;
+
+        // Combine nonce + ciphertext
+        let mut combined = nonce_bytes.to_vec();
+        combined.extend_from_slice(&ciphertext);
+
+        Ok(BASE64.encode(&combined))
+    }
+
+    /// Decrypt to binary data (for files like Excel, images, etc.)
+    ///
+    /// Returns the original binary data
+    pub fn decrypt_bytes(&self, ciphertext: &str) -> Result<Vec<u8>> {
+        if ciphertext.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Decode from base64
+        let combined = BASE64
+            .decode(ciphertext)
+            .map_err(|_| EncryptionError::InvalidFormat)?;
+
+        // Must have at least nonce (12) + tag (16) = 28 bytes
+        if combined.len() < 28 {
+            return Err(EncryptionError::InvalidFormat);
+        }
+
+        // Split nonce and ciphertext
+        let (nonce_bytes, encrypted_data) = combined.split_at(12);
+        let nonce = Nonce::from_slice(nonce_bytes);
+
+        // Decrypt and verify authentication tag
+        let plaintext_bytes = self
+            .cipher
+            .decrypt(nonce, encrypted_data)
+            .map_err(|e| EncryptionError::DecryptionFailed(e.to_string()))?;
+
+        Ok(plaintext_bytes)
+    }
 }
 
 /// Generate a new encryption key (for initial setup)

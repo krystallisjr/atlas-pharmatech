@@ -52,11 +52,8 @@ impl EncryptedFileStorage {
         hasher.update(plaintext_data);
         let plaintext_hash = format!("{:x}", hasher.finalize());
 
-        // Convert bytes to string for encryption service
-        let plaintext_str = String::from_utf8_lossy(plaintext_data).to_string();
-
-        // Encrypt the file data
-        let encrypted_data = self.encryption.encrypt(&plaintext_str)
+        // Encrypt the binary file data (preserves Excel/binary files correctly)
+        let encrypted_data = self.encryption.encrypt_bytes(plaintext_data)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Encryption failed: {}", e)))?;
 
         // Create session directory
@@ -101,7 +98,7 @@ impl EncryptedFileStorage {
     pub fn read_encrypted_file(&self, relative_path: &str) -> Result<Vec<u8>> {
         let full_path = self.base_path.join(relative_path);
 
-        // Read encrypted data
+        // Read encrypted data (base64-encoded string)
         let mut file = fs::File::open(&full_path)
             .map_err(|e| AppError::Internal(
                 anyhow::anyhow!("Failed to open file {}: {}", relative_path, e)
@@ -113,13 +110,13 @@ impl EncryptedFileStorage {
                 anyhow::anyhow!("Failed to read encrypted file: {}", e)
             ))?;
 
-        // Decrypt
-        let plaintext = self.encryption.decrypt(&encrypted_data)
+        // Decrypt to binary data (preserves Excel/binary files correctly)
+        let plaintext_bytes = self.encryption.decrypt_bytes(&encrypted_data)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Decryption failed: {}", e)))?;
 
         tracing::info!("🔓 File decrypted: {}", relative_path);
 
-        Ok(plaintext.into_bytes())
+        Ok(plaintext_bytes)
     }
 
     /// Verify file integrity by comparing hash

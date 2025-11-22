@@ -151,9 +151,12 @@ export default function DashboardPage() {
       inquiryStatusBreakdown: [],
     };
 
-    const normalizeFDACategory = (category: string | undefined): string => {
-      if (!category) return 'Other';
-      const cat = category.toLowerCase().trim();
+    // Auto-detect pharmaceutical category from category field OR drug name
+    const normalizeFDACategory = (category: string | undefined, drugName?: string): string => {
+      const cat = (category || '').toLowerCase().trim();
+      const name = (drugName || '').toLowerCase().trim();
+
+      // Check category field first
       if (cat.includes('antibiotic') || cat.includes('antibacterial')) return 'Antibiotics';
       if (cat.includes('analgesic') || cat.includes('pain') || cat.includes('nsaid')) return 'Analgesics';
       if (cat.includes('cardiovascular') || cat.includes('cardio') || cat.includes('heart')) return 'Cardiovascular';
@@ -166,13 +169,52 @@ export default function DashboardPage() {
       if (cat.includes('hormone') || cat.includes('endocrine')) return 'Hormonal';
       if (cat.includes('vitamin') || cat.includes('supplement')) return 'Vitamins';
       if (cat.includes('vaccine')) return 'Vaccines';
-      return category.charAt(0).toUpperCase() + category.slice(1);
+
+      // Auto-detect from drug name if category is generic (General/Other/empty)
+      if (!cat || cat === 'general' || cat === 'other') {
+        // Antibiotics
+        if (/amoxicillin|penicillin|cephalexin|azithromycin|ciprofloxacin|doxycycline|metronidazole|clindamycin|erythromycin|ampicillin|tetracycline|vancomycin|gentamicin|levofloxacin|ceftriaxone|augmentin|bactrim|zithromax|cipro|keflex/i.test(name)) return 'Antibiotics';
+
+        // Analgesics/Pain
+        if (/aspirin|ibuprofen|acetaminophen|naproxen|tylenol|advil|motrin|aleve|paracetamol|tramadol|morphine|oxycodone|hydrocodone|codeine|fentanyl|percocet|vicodin|celebrex|meloxicam/i.test(name)) return 'Analgesics';
+
+        // Cardiovascular
+        if (/lisinopril|metoprolol|amlodipine|atorvastatin|losartan|simvastatin|carvedilol|furosemide|hydrochlorothiazide|warfarin|clopidogrel|digoxin|propranolol|valsartan|nifedipine|diltiazem|lipitor|crestor|plavix|lasix/i.test(name)) return 'Cardiovascular';
+
+        // Gastrointestinal
+        if (/omeprazole|pantoprazole|ranitidine|famotidine|esomeprazole|lansoprazole|prilosec|nexium|pepcid|zantac|protonix|prevacid|metoclopramide|ondansetron|loperamide|bismuth|antacid|laxative/i.test(name)) return 'Gastrointestinal';
+
+        // Diabetes
+        if (/metformin|insulin|glipizide|glyburide|sitagliptin|empagliflozin|liraglutide|glucophage|januvia|jardiance|lantus|humalog|novolog|ozempic|trulicity/i.test(name)) return 'Diabetes';
+
+        // Respiratory
+        if (/albuterol|fluticasone|montelukast|budesonide|ipratropium|salmeterol|tiotropium|ventolin|proair|advair|symbicort|singulair|prednisone|theophylline/i.test(name)) return 'Respiratory';
+
+        // Neurological/Psychiatric
+        if (/sertraline|fluoxetine|escitalopram|duloxetine|venlafaxine|bupropion|alprazolam|lorazepam|diazepam|clonazepam|gabapentin|pregabalin|lamotrigine|carbamazepine|phenytoin|levetiracetam|zoloft|prozac|lexapro|cymbalta|xanax|ativan|valium|neurontin|lyrica/i.test(name)) return 'Neurological';
+
+        // Dermatological
+        if (/hydrocortisone|betamethasone|triamcinolone|clobetasol|ketoconazole|clotrimazole|mupirocin|tretinoin|adapalene|benzoyl|permethrin|ivermectin/i.test(name)) return 'Dermatological';
+
+        // Hormonal
+        if (/levothyroxine|prednisone|methylprednisolone|estradiol|progesterone|testosterone|synthroid|armour thyroid/i.test(name)) return 'Hormonal';
+
+        // Vitamins/Supplements
+        if (/vitamin|calcium|iron|zinc|magnesium|folic acid|b12|d3|omega|multivitamin|supplement/i.test(name)) return 'Vitamins';
+      }
+
+      // Return original category if specific, otherwise Other
+      if (category && cat !== 'general') {
+        return category.charAt(0).toUpperCase() + category.slice(1);
+      }
+      return 'Other';
     };
 
-    // Category distribution
+    // Category distribution - auto-detects category from drug name if needed
     const categoryMap = new Map<string, { count: number; quantity: number; value: number }>();
     inventory.forEach((item) => {
-      const category = normalizeFDACategory(item.pharmaceutical?.category);
+      const drugName = item.pharmaceutical?.brand_name || item.pharmaceutical?.generic_name || '';
+      const category = normalizeFDACategory(item.pharmaceutical?.category, drugName);
       const current = categoryMap.get(category) || { count: 0, quantity: 0, value: 0 };
       categoryMap.set(category, {
         count: current.count + 1,
@@ -233,12 +275,15 @@ export default function DashboardPage() {
 
     // Top products by value
     const topProducts = inventory
-      .map(item => ({
-        name: item.pharmaceutical?.brand_name || 'Unknown',
-        value: parseFloat(item.unit_price) * item.quantity,
-        quantity: item.quantity,
-        category: normalizeFDACategory(item.pharmaceutical?.category),
-      }))
+      .map(item => {
+        const drugName = item.pharmaceutical?.brand_name || item.pharmaceutical?.generic_name || '';
+        return {
+          name: item.pharmaceutical?.brand_name || 'Unknown',
+          value: parseFloat(item.unit_price) * item.quantity,
+          quantity: item.quantity,
+          category: normalizeFDACategory(item.pharmaceutical?.category, drugName),
+        };
+      })
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
 

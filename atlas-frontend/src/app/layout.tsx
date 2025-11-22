@@ -1,11 +1,11 @@
 import './globals.css'
-import { Inter } from 'next/font/google'
+import { DM_Sans } from 'next/font/google'
 import { Providers } from '@/components/providers'
 
-const inter = Inter({ subsets: ['latin'] })
+const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'] })
 
 export const metadata = {
-  title: 'Atlas Pharmaceutical Marketplace',
+  title: 'Atlas PharmaTech Marketplace',
   description: 'B2B Pharmaceutical Inventory Management and Trading Platform',
 }
 
@@ -16,7 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={dmSans.className}>
         <Providers>
           {children}
         </Providers>

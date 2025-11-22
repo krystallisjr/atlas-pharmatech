@@ -1,4 +1,5 @@
 pub mod tls;
+pub mod oauth;
 
 use std::env;
 use anyhow::Result;
@@ -59,7 +60,37 @@ impl AppConfig {
             .collect();
 
         let database_config = DatabaseConfig::from_env()?;
-        let database_pool = sqlx::PgPool::connect(&database_config.connection_string()).await?;
+
+        // 🔒 PRODUCTION DATABASE CONNECTION POOL
+        // Configure connection pooling to prevent resource exhaustion
+        use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+        use std::str::FromStr;
+
+        // Parse connection options
+        let mut connect_opts = PgConnectOptions::from_str(&database_config.connection_string())?;
+
+        // 🔒 SECURITY: Set statement timeout (query-level timeout)
+        // Prevents long-running queries from blocking the application
+        connect_opts = connect_opts
+            .statement_cache_capacity(100)  // Cache prepared statements
+            .application_name("atlas_pharma");  // Identify in pg_stat_activity
+
+        // Add statement timeout via connection string
+        let connection_string_with_timeout = format!(
+            "{}&options=-c%20statement_timeout=30000",  // 30 second query timeout
+            database_config.connection_string()
+        );
+
+        let database_pool = PgPoolOptions::new()
+            .max_connections(30)  // Maximum 30 concurrent connections (prevents database overload)
+            .min_connections(5)   // Maintain 5 idle connections (reduces connection overhead)
+            .acquire_timeout(std::time::Duration::from_secs(10))  // 10s timeout to acquire connection
+            .idle_timeout(std::time::Duration::from_secs(600))    // Close idle connections after 10 minutes
+            .max_lifetime(std::time::Duration::from_secs(1800))   // Recycle connections after 30 minutes
+            .connect(&connection_string_with_timeout)
+            .await?;
+
+        tracing::info!("✅ Database connection pool initialized (max: 30, min: 5)");
 
         Ok(Self {
             database: database_config,

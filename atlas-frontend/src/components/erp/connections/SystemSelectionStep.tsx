@@ -15,7 +15,7 @@ export function SystemSelectionStep({ onSelect }: SystemSelectionStepProps) {
         Select ERP System
       </h2>
       <p className="text-gray-600 dark:text-gray-400 mb-8">
-        Choose which ERP system you want to connect to Atlas Pharma
+        Choose which ERP system you want to connect to Atlas PharmaTech
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

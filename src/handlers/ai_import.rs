@@ -15,6 +15,7 @@ use crate::{
         FileParserService,
         BatchImportProcessor,
         AuditService,
+        ApiQuotaService,
     },
     utils::encrypted_file_storage::EncryptedFileStorage,
 };
@@ -69,7 +70,10 @@ pub async fn upload_and_analyze(
         ));
     }
 
-    tracing::info!("Processing file upload: {} ({} bytes)", filename, file_data.len());
+    // 🔒 SECURITY: Sanitize filename for log injection prevention
+    tracing::info!("Processing file upload: {} ({} bytes)",
+        crate::utils::log_sanitizer::sanitize_for_log(&filename),
+        file_data.len());
 
     // Create import session
     let session_id = ai_service.create_session(
@@ -85,7 +89,9 @@ pub async fn upload_and_analyze(
     )?;
     let (file_path, file_hash) = file_storage.save_encrypted_file(session_id, &filename, &file_data)?;
 
-    tracing::info!("File saved to: {}", file_path);
+    // 🔒 SECURITY: Sanitize file path for log injection prevention
+    tracing::info!("File saved to: {}",
+        crate::utils::log_sanitizer::sanitize_for_log(&file_path));
 
     // Update session with file path and hash
     sqlx::query(
@@ -97,8 +103,40 @@ pub async fn upload_and_analyze(
     .execute(&config.database_pool)
     .await?;
 
+    // 🔒 SECURITY: Check API quota before making Anthropic API call
+    let quota_service = ApiQuotaService::new(config.database_pool.clone());
+    let (allowed, used, remaining) = quota_service.check_quota(claims.user_id).await?;
+
+    if !allowed {
+        tracing::warn!("API quota exceeded for user: {} (used: {}, remaining: {:?})",
+            claims.user_id, used, remaining);
+        return Err(crate::middleware::error_handling::AppError::Forbidden(
+            format!("API quota exceeded. You have used {} requests this month.", used)
+        ));
+    }
+
+    tracing::info!("API quota check passed for user: {} (used: {}, remaining: {:?})",
+        claims.user_id, used, remaining);
+
     // Analyze file with Claude AI (in background for large files)
-    let _mapping = ai_service.analyze_file(session_id, file_data, claims.user_id).await?;
+    let start_time = std::time::Instant::now();
+    let _mapping = ai_service.analyze_file(session_id, file_data.clone(), claims.user_id).await?;
+    let latency_ms = start_time.elapsed().as_millis() as i64;
+
+    // 📊 OBSERVABILITY: Track API usage
+    let estimated_tokens_input = (file_data.len() / 4) as i32; // Rough estimate: 1 token ≈ 4 bytes
+    let estimated_tokens_output = 500; // Rough estimate for AI response
+
+    quota_service.record_usage(
+        claims.user_id,
+        "ai_import/file_analysis",
+        estimated_tokens_input,
+        estimated_tokens_output,
+        latency_ms as i32,
+    ).await?;
+
+    tracing::info!("API usage tracked for user: {} (input tokens: ~{}, output tokens: ~{})",
+        claims.user_id, estimated_tokens_input, estimated_tokens_output);
 
     // Get updated session
     let session = ai_service.get_session(session_id).await?;
@@ -187,7 +225,10 @@ pub async fn start_import(
     )?;
     let file_data = file_storage.read_encrypted_file(&file_path)?;
 
-    tracing::info!("Loaded file from storage: {} ({} bytes)", file_path, file_data.len());
+    // 🔒 SECURITY: Sanitize file path for log injection prevention
+    tracing::info!("Loaded file from storage: {} ({} bytes)",
+        crate::utils::log_sanitizer::sanitize_for_log(&file_path),
+        file_data.len());
 
     // Update session status to importing
     sqlx::query!(

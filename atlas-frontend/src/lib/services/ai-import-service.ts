@@ -4,16 +4,10 @@ import type { AiImportSession, AiImportRowResult, UserQuota } from '@/types/ai-i
 export class AiImportService {
   /**
    * Upload a file for AI analysis
+   * Uses dedicated upload method for proper multipart/form-data handling
    */
   static async uploadFile(file: File): Promise<AiImportSession> {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    return await apiClient.post<AiImportSession>('/api/ai-import/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    return await apiClient.upload<AiImportSession>('/api/ai-import/upload', file);
   }
 
   /**
@@ -27,7 +21,8 @@ export class AiImportService {
    * Start import for a session
    */
   static async startImport(sessionId: string): Promise<AiImportSession> {
-    return await apiClient.post<AiImportSession>(`/api/ai-import/session/${sessionId}/start-import`);
+    // Send empty body to ensure Content-Type: application/json header is set
+    return await apiClient.post<AiImportSession>(`/api/ai-import/session/${sessionId}/start-import`, {});
   }
 
   /**

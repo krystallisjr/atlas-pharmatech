@@ -295,4 +295,221 @@ impl OpenFdaRepository {
 
         Ok(log)
     }
+
+    /// Start a new sync log with sync type and expected total
+    pub async fn start_sync_log_with_type(&self, sync_type: &str, total_expected: Option<i32>) -> Result<Uuid> {
+        let total_batches = total_expected.map(|t| (t + 99) / 100); // Batch size of 100
+        let row = query(
+            r#"
+            INSERT INTO openfda_sync_log (
+                sync_started_at, status, sync_type, total_expected, total_batches,
+                records_processed, records_inserted, records_updated, records_skipped, records_failed,
+                current_batch
+            )
+            VALUES ($1, 'in_progress', $2, $3, $4, 0, 0, 0, 0, 0, 0)
+            RETURNING id
+            "#
+        )
+        .bind(Utc::now())
+        .bind(sync_type)
+        .bind(total_expected)
+        .bind(total_batches)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let id: Uuid = row.try_get("id")?;
+        Ok(id)
+    }
+
+    /// Update sync progress
+    pub async fn update_sync_progress(
+        &self,
+        log_id: Uuid,
+        records_processed: i32,
+        records_inserted: i32,
+        records_updated: i32,
+        records_skipped: i32,
+        records_failed: i32,
+        current_batch: i32,
+        api_response_time_ms: i32,
+    ) -> Result<()> {
+        query(
+            r#"
+            UPDATE openfda_sync_log
+            SET records_processed = $2,
+                records_inserted = $3,
+                records_updated = $4,
+                records_skipped = $5,
+                records_failed = $6,
+                current_batch = $7,
+                api_response_time_ms = COALESCE(api_response_time_ms, 0) + $8
+            WHERE id = $1
+            "#
+        )
+        .bind(log_id)
+        .bind(records_processed)
+        .bind(records_inserted)
+        .bind(records_updated)
+        .bind(records_skipped)
+        .bind(records_failed)
+        .bind(current_batch)
+        .bind(api_response_time_ms)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Set total expected records (after first API call)
+    pub async fn set_total_expected(&self, log_id: Uuid, total_expected: i32) -> Result<()> {
+        let total_batches = (total_expected + 99) / 100;
+        query(
+            r#"
+            UPDATE openfda_sync_log
+            SET total_expected = $2, total_batches = $3
+            WHERE id = $1
+            "#
+        )
+        .bind(log_id)
+        .bind(total_expected)
+        .bind(total_batches)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Complete sync log with final stats
+    pub async fn complete_sync_log_full(
+        &self,
+        log_id: Uuid,
+        records_fetched: i32,
+        records_inserted: i32,
+        records_updated: i32,
+        records_skipped: i32,
+        records_failed: i32,
+        processing_time_ms: i32,
+    ) -> Result<()> {
+        query(
+            r#"
+            UPDATE openfda_sync_log
+            SET sync_completed_at = $1,
+                records_fetched = $2,
+                records_inserted = $3,
+                records_updated = $4,
+                records_skipped = $5,
+                records_failed = $6,
+                records_processed = $2,
+                processing_time_ms = $7,
+                status = 'completed'
+            WHERE id = $8
+            "#
+        )
+        .bind(Utc::now())
+        .bind(records_fetched)
+        .bind(records_inserted)
+        .bind(records_updated)
+        .bind(records_skipped)
+        .bind(records_failed)
+        .bind(processing_time_ms)
+        .bind(log_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get sync log by ID
+    pub async fn get_sync_log(&self, log_id: Uuid) -> Result<Option<OpenFdaSyncLog>> {
+        let log = query_as::<_, OpenFdaSyncLog>(
+            "SELECT * FROM openfda_sync_log WHERE id = $1"
+        )
+        .bind(log_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(log)
+    }
+
+    /// Get active sync (if any)
+    pub async fn get_active_sync(&self) -> Result<Option<OpenFdaSyncLog>> {
+        let log = query_as::<_, OpenFdaSyncLog>(
+            r#"
+            SELECT * FROM openfda_sync_log
+            WHERE status = 'in_progress'
+            ORDER BY sync_started_at DESC
+            LIMIT 1
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(log)
+    }
+
+    /// Get sync logs with pagination
+    pub async fn get_sync_logs(&self, limit: i64, offset: i64) -> Result<Vec<OpenFdaSyncLog>> {
+        let logs = query_as::<_, OpenFdaSyncLog>(
+            r#"
+            SELECT * FROM openfda_sync_log
+            ORDER BY sync_started_at DESC
+            LIMIT $1 OFFSET $2
+            "#
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(logs)
+    }
+
+    /// Cancel a running sync
+    pub async fn cancel_sync(&self, log_id: Uuid, cancelled_by: Uuid) -> Result<bool> {
+        let result = query(
+            r#"
+            UPDATE openfda_sync_log
+            SET status = 'cancelled',
+                cancelled_at = $1,
+                cancelled_by = $2,
+                sync_completed_at = $1
+            WHERE id = $3 AND status = 'in_progress'
+            "#
+        )
+        .bind(Utc::now())
+        .bind(cancelled_by)
+        .bind(log_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Check if there's an active sync running
+    pub async fn is_sync_running(&self) -> Result<bool> {
+        let row = query(
+            "SELECT EXISTS(SELECT 1 FROM openfda_sync_log WHERE status = 'in_progress') as running"
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let running: bool = row.try_get("running")?;
+        Ok(running)
+    }
+
+    /// Clean up old sync logs (keep last N days)
+    pub async fn cleanup_old_logs(&self, days_to_keep: i32) -> Result<i64> {
+        let result = query(
+            r#"
+            DELETE FROM openfda_sync_log
+            WHERE sync_started_at < NOW() - INTERVAL '1 day' * $1
+              AND status != 'in_progress'
+            "#
+        )
+        .bind(days_to_keep)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() as i64)
+    }
 }

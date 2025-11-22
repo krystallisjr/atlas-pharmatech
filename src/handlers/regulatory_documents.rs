@@ -259,15 +259,30 @@ pub async fn get_document(
     Extension(claims): Extension<Claims>,
     Path(document_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
-    // Fetch document with full details
+    // Fetch document with full details - using explicit column selection for proper NULL handling
     let doc = sqlx::query!(
         r#"
         SELECT
-            rd.*,
-            u1.email as generated_by_name,
-            u1.email as generated_by_email,
-            u2.email as approved_by_name,
-            u2.email as approved_by_email
+            rd.id,
+            rd.document_type,
+            rd.document_number,
+            rd.title,
+            rd.content,
+            rd.content_markdown as "content_markdown?",
+            rd.content_hash,
+            rd.generated_signature as "generated_signature?",
+            rd.approved_signature as "approved_signature?",
+            rd.rag_context,
+            rd.status,
+            rd.generated_by,
+            rd.approved_by as "approved_by?",
+            rd.approved_at as "approved_at?",
+            rd.created_at,
+            rd.updated_at,
+            u1.email as "generated_by_name?",
+            u1.email as "generated_by_email?",
+            u2.email as "approved_by_name?",
+            u2.email as "approved_by_email?"
         FROM regulatory_documents rd
         LEFT JOIN users u1 ON rd.generated_by = u1.id
         LEFT JOIN users u2 ON rd.approved_by = u2.id
@@ -308,13 +323,18 @@ pub async fn get_document(
         "content_markdown": doc.content_markdown,
         "content_hash": doc.content_hash,
         "status": doc.status,
-        "generated_by": {
+        // Keep generated_by as UUID string for frontend compatibility
+        "generated_by": doc.generated_by.to_string(),
+        // Add user details in separate field
+        "generated_by_user": {
             "id": doc.generated_by,
             "name": doc.generated_by_name,
             "email": doc.generated_by_email,
         },
         "generated_signature": doc.generated_signature,
-        "approved_by": doc.approved_by.map(|id| serde_json::json!({
+        // Keep approved_by as UUID string for frontend compatibility
+        "approved_by": doc.approved_by.map(|id| id.to_string()),
+        "approved_by_user": doc.approved_by.map(|id| serde_json::json!({
             "id": id,
             "name": doc.approved_by_name,
             "email": doc.approved_by_email,
@@ -328,10 +348,11 @@ pub async fn get_document(
             "id": entry.id,
             "operation": entry.operation,
             "content_hash": entry.content_hash,
-            "signature": &entry.signature[..16],  // Truncate for display
-            "public_key": &entry.signature_public_key[..16],
+            // Safe truncation - show preview without panic on short strings
+            "signature": entry.signature.get(..16).unwrap_or(&entry.signature),
+            "public_key": entry.signature_public_key.get(..16).unwrap_or(&entry.signature_public_key),
             "created_at": entry.created_at,
-            "chain_hash": &entry.chain_hash[..16],
+            "chain_hash": entry.chain_hash.get(..16).unwrap_or(&entry.chain_hash),
         })).collect::<Vec<_>>(),
     });
 

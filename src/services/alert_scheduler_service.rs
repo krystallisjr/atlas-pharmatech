@@ -217,9 +217,13 @@ impl AlertSchedulerService {
         .fetch_all(&self.db_pool)
         .await?;
 
+        tracing::info!("Found {} users with low stock alerts enabled", users.len());
+
         for user_prefs in users {
             let user_id = user_prefs.user_id;
             let threshold = user_prefs.low_stock_threshold;
+
+            tracing::info!("Checking low stock for user {} with threshold {}", user_id, threshold);
 
             // Get low stock items for this user
             let low_stock_items = sqlx::query!(
@@ -247,6 +251,8 @@ impl AlertSchedulerService {
             )
             .fetch_all(&self.db_pool)
             .await?;
+
+            tracing::info!("Found {} low stock items for user {}", low_stock_items.len(), user_id);
 
             // Create alerts for each low stock item
             for item in low_stock_items {

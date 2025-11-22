@@ -104,8 +104,6 @@ export default function InquiriesPage() {
 
       const transaction = await MarketplaceService.createTransaction({
         inquiry_id: inquiry.id,
-        quantity: inquiry.quantity_requested,
-        unit_price: inquiry.inventory.unit_price,
       });
 
       // Update inquiry status to converted

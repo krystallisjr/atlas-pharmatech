@@ -31,11 +31,26 @@ pub struct RateLimitConfig {
 }
 
 impl RateLimitConfig {
-    /// Strict limits for authentication endpoints (prevent brute force)
+    /// 🔒 PRODUCTION SECURITY: Strict limits for authentication endpoints
+    ///
+    /// **Brute Force Prevention:**
+    /// - 5 attempts per 15 minutes (was 5 per minute)
+    /// - Reduces attack surface from 7200/day to 480/day
+    /// - Meets OWASP recommendations for auth rate limiting
+    ///
+    /// **Additional Protections (implemented separately):**
+    /// - Account lockout after 5 failed attempts (see auth service)
+    /// - Failed login audit logging (see comprehensive_audit_service)
+    /// - IP tracking and suspicious activity detection
+    ///
+    /// **Compliance:**
+    /// - OWASP Authentication Cheat Sheet
+    /// - NIST SP 800-63B (Digital Identity Guidelines)
+    /// - PCI DSS Requirement 8.1.6 (limit repeated access attempts)
     pub fn auth() -> Self {
         Self {
             max_requests: 5,
-            window: Duration::from_secs(60), // 5 requests per minute
+            window: Duration::from_secs(900), // 🔒 5 requests per 15 minutes (was 60 seconds)
         }
     }
 
@@ -44,6 +59,24 @@ impl RateLimitConfig {
         Self {
             max_requests: 100,
             window: Duration::from_secs(60), // 100 requests per minute
+        }
+    }
+
+    /// 🔒 PRODUCTION SECURITY: Very strict limits for public endpoints
+    ///
+    /// **Prevents:**
+    /// - Data scraping/harvesting
+    /// - Enumeration attacks
+    /// - Resource exhaustion
+    ///
+    /// **Use for:**
+    /// - Unauthenticated marketplace search
+    /// - Public inventory listings
+    /// - Anonymous data access
+    pub fn public() -> Self {
+        Self {
+            max_requests: 20,
+            window: Duration::from_secs(900), // 20 requests per 15 minutes
         }
     }
 }
@@ -154,7 +187,16 @@ pub async fn rate_limit_middleware(
     match limiter.check(&ip) {
         Ok(()) => Ok(next.run(request).await),
         Err(retry_after) => {
-            tracing::warn!("Rate limit exceeded for IP: {}", ip);
+            // 🔒 SECURITY: Enhanced logging for rate limit violations
+            // Helps detect brute force attacks and DDoS attempts
+            tracing::warn!(
+                "⚠️  RATE LIMIT EXCEEDED - IP: {}, Path: {}, Method: {}, Retry-After: {}s",
+                crate::utils::log_sanitizer::sanitize_ip_for_log(&addr.ip()),
+                crate::utils::log_sanitizer::sanitize_for_log(request.uri().path()),
+                request.method(),
+                retry_after
+            );
+
             Err((
                 StatusCode::TOO_MANY_REQUESTS,
                 [("Retry-After", retry_after.to_string())],

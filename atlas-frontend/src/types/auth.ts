@@ -1,3 +1,5 @@
+export type UserRole = 'user' | 'admin' | 'superadmin';
+
 export interface User {
   id: string;
   email: string;
@@ -7,6 +9,7 @@ export interface User {
   address?: string;
   license_number?: string;
   is_verified: boolean;
+  role: UserRole;
   created_at: string;
 }
 

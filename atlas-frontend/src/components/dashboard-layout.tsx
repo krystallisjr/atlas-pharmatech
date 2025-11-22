@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,9 +19,12 @@ import {
   Search,
   Sparkles,
   Shield,
-  Moon,
-  Sun,
-  Plug
+  Plug,
+  ShieldCheck,
+  UserCog,
+  Activity,
+  ShieldAlert,
+  Lock
 } from 'lucide-react';
 import { ProtectedRoute } from './protected-route';
 import { AiAssistantSidebar } from './ai-assistant-sidebar';
@@ -46,14 +48,21 @@ const navigation = [
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 
+const adminNavigation = [
+  { name: 'Admin Dashboard', href: '/dashboard/admin', icon: ShieldCheck },
+  { name: 'User Management', href: '/dashboard/admin/users', icon: UserCog },
+  { name: 'Verification Queue', href: '/dashboard/admin/verification', icon: ShieldAlert },
+  { name: 'Audit Logs', href: '/dashboard/admin/audit-logs', icon: Activity },
+  { name: 'Security Monitoring', href: '/dashboard/admin/security', icon: Lock },
+];
+
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState<string>('');
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { user, logout, isAdmin } = useAuth();
 
   const handleLogout = () => {
     logout();
@@ -70,24 +79,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+      <div className="min-h-screen bg-gray-50">
         {/* Mobile sidebar backdrop */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-40 lg:hidden bg-gray-600 bg-opacity-75 dark:bg-gray-900 dark:bg-opacity-80"
+            className="fixed inset-0 z-40 lg:hidden bg-gray-600 bg-opacity-75"
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
         {/* Sidebar */}
         <div className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 border-r dark:border-gray-700 shadow-lg transform transition-all duration-300 ease-in-out lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 shadow-lg transform transition-all duration-300 ease-in-out lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}>
-          <div className="flex items-center justify-between h-16 px-6 border-b dark:border-gray-700">
+          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
             <Link href="/dashboard" className="flex items-center gap-2 group">
-              <AtlasLogo size={36} className="transition-transform group-hover:scale-110" />
-              <span className="text-xl font-bold text-gray-900 dark:text-white">Atlas Tech</span>
+              <AtlasLogo size={32} className="transition-transform group-hover:scale-110" />
+              <span className="text-xl font-bold text-gray-900">Atlas PharmaTech</span>
             </Link>
             <Button
               variant="ghost"
@@ -99,7 +108,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </Button>
           </div>
 
-          <nav className="mt-6 px-3">
+          <nav className="mt-6 px-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+            {/* Main Navigation */}
             <div className="space-y-1">
               {navigation.map((item) => {
                 const isActive = pathname === item.href;
@@ -110,8 +120,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     className={cn(
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive
-                        ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-                        : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
+                        ? "bg-blue-100 text-blue-700"
+                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                     )}
                     onClick={() => setSidebarOpen(false)}
                   >
@@ -121,31 +131,80 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 );
               })}
             </div>
+
+            {/* Admin Navigation Section */}
+            {isAdmin() && (
+              <>
+                <div className="my-4 border-t border-gray-200"></div>
+                <div className="mb-2 px-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Administration
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  {adminNavigation.map((item) => {
+                    const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        className={cn(
+                          "flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                          isActive
+                            ? "bg-purple-100 text-purple-700"
+                            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                        )}
+                        onClick={() => setSidebarOpen(false)}
+                      >
+                        <div className="flex items-center">
+                          <item.icon className="mr-3 h-5 w-5" />
+                          {item.name}
+                        </div>
+                        {item.badge && (
+                          <Badge variant="destructive" className="ml-auto text-xs">
+                            New
+                          </Badge>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </nav>
 
           {/* User info and logout */}
-          <div className="absolute bottom-0 left-0 right-0 p-4 border-t dark:border-gray-700">
+          <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
             <div className="flex items-center mb-3">
-              <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded-full flex items-center justify-center">
+              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
                 <span className="text-white text-sm font-medium">
                   {user?.company_name.charAt(0).toUpperCase()}
                 </span>
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+              <div className="ml-3 flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
                   {user?.company_name}
                 </p>
-                <div className="flex items-center">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {user?.company_type}
-                  </p>
+                <div className="flex items-center gap-1 flex-wrap">
                   {user?.is_verified ? (
-                    <Badge variant="secondary" className="ml-2 text-xs">
+                    <Badge variant="secondary" className="text-xs">
                       Verified
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="ml-2 text-xs">
+                    <Badge variant="outline" className="text-xs">
                       Pending
+                    </Badge>
+                  )}
+                  {user?.role === 'superadmin' && (
+                    <Badge className="text-xs bg-purple-100 text-purple-700 border-purple-200">
+                      <Shield className="h-2.5 w-2.5 mr-1" />
+                      Superadmin
+                    </Badge>
+                  )}
+                  {user?.role === 'admin' && (
+                    <Badge variant="default" className="text-xs">
+                      <Shield className="h-2.5 w-2.5 mr-1" />
+                      Admin
                     </Badge>
                   )}
                 </div>
@@ -166,7 +225,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Main content */}
         <div className="lg:pl-64">
           {/* Top bar */}
-          <div className="sticky top-0 z-30 flex h-16 bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700">
+          <div className="sticky top-0 z-30 flex h-16 bg-white shadow-sm border-b border-gray-200">
             <Button
               variant="ghost"
               size="sm"
@@ -186,22 +245,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     value={globalSearch}
                     onChange={(e) => setGlobalSearch(e.target.value)}
                     onKeyDown={handleGlobalSearch}
-                    className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white dark:focus:bg-gray-600 transition-all"
+                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white transition-all"
                   />
                 </div>
               </div>
 
               <div className="flex items-center space-x-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                  className="relative"
-                >
-                  <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                  <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                  <span className="sr-only">Toggle theme</span>
-                </Button>
                 <NotificationBell />
               </div>
             </div>

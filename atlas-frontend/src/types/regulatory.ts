@@ -14,10 +14,11 @@ export interface GenerateDocumentRequest {
 }
 
 export interface RagContextEntry {
-  regulation_source: string;
-  regulation_section: string;
+  id?: string;
+  regulation_source?: string;
+  regulation_section?: string;
   section_title: string;
-  content: string;
+  content?: string;
   similarity: number;
 }
 
@@ -28,7 +29,8 @@ export interface GeneratedDocument {
   title: string;
   content: Record<string, any>;
   content_hash: string;
-  generated_signature: string;
+  generated_signature?: string;
+  public_key?: string;
   approved_signature?: string;
   rag_context?: RagContextEntry[];
   status: DocumentStatus;
@@ -36,7 +38,7 @@ export interface GeneratedDocument {
   approved_by?: string;
   approved_at?: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export interface AuditLedgerEntry {

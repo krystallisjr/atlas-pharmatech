@@ -12,8 +12,9 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/contexts/auth-context'
-import { RegisterRequest } from '@/types/auth'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Eye, EyeOff } from 'lucide-react'
+import { OAuthButtons, OAuthDivider } from '@/components/auth/OAuthButtons'
+import { AtlasLogo } from '@/components/atlas-logo'
 
 const registerSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -40,14 +41,11 @@ export default function RegisterPage() {
     register,
     handleSubmit,
     setValue,
-    watch,
     formState: { errors },
     setError,
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
   })
-
-  const companyType = watch('company_type')
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -66,37 +64,48 @@ export default function RegisterPage() {
     }
   }
 
+  const inputClassName = (hasError: boolean) =>
+    `mt-1 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 ${hasError ? 'border-red-500' : ''}`
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-2xl w-full space-y-8">
+        {/* Logo and Header */}
         <div className="text-center">
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            Join Atlas Pharma Marketplace
+          <Link href="/" className="inline-flex items-center justify-center space-x-2 mb-6">
+            <AtlasLogo size={40} />
+            <span className="text-xl font-bold text-gray-900">Atlas PharmaTech</span>
+          </Link>
+          <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+            Create your account
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Connect with pharmaceutical companies nationwide
+            Already have an account?{' '}
+            <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+              Sign in
+            </Link>
           </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Create Account</CardTitle>
-            <CardDescription>
-              Register your pharmaceutical business on Atlas
+        <Card className="bg-white border-gray-200 shadow-lg">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-gray-900">Register your business</CardTitle>
+            <CardDescription className="text-gray-600">
+              Join the pharmaceutical marketplace
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="email">Email Address</Label>
+                    <Label htmlFor="email" className="text-gray-700">Email Address</Label>
                     <Input
                       id="email"
                       type="email"
                       placeholder="business@company.com"
                       {...register('email')}
-                      className={errors.email ? 'border-red-500' : ''}
+                      className={inputClassName(!!errors.email)}
                     />
                     {errors.email && (
                       <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -104,21 +113,21 @@ export default function RegisterPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="password">Password</Label>
-                    <div className="relative">
+                    <Label htmlFor="password" className="text-gray-700">Password</Label>
+                    <div className="relative mt-1">
                       <Input
                         id="password"
                         type={showPassword ? 'text' : 'password'}
                         placeholder="Create a strong password"
                         {...register('password')}
-                        className={errors.password ? 'border-red-500' : ''}
+                        className={`pr-10 ${inputClassName(!!errors.password)}`}
                       />
                       <button
                         type="button"
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
                         onClick={() => setShowPassword(!showPassword)}
                       >
-                        {showPassword ? 'Hide' : 'Show'}
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
                     {errors.password && (
@@ -127,12 +136,12 @@ export default function RegisterPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="company_name">Company Name</Label>
+                    <Label htmlFor="company_name" className="text-gray-700">Company Name</Label>
                     <Input
                       id="company_name"
                       placeholder="Your company name"
                       {...register('company_name')}
-                      className={errors.company_name ? 'border-red-500' : ''}
+                      className={inputClassName(!!errors.company_name)}
                     />
                     {errors.company_name && (
                       <p className="mt-1 text-sm text-red-600">{errors.company_name.message}</p>
@@ -140,12 +149,12 @@ export default function RegisterPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="company_type">Company Type</Label>
+                    <Label htmlFor="company_type" className="text-gray-700">Company Type</Label>
                     <Select onValueChange={(value) => setValue('company_type', value as any)}>
-                      <SelectTrigger className={errors.company_type ? 'border-red-500' : ''}>
+                      <SelectTrigger className={`mt-1 bg-white border-gray-300 text-gray-900 ${errors.company_type ? 'border-red-500' : ''}`}>
                         <SelectValue placeholder="Select company type" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-white border-gray-200">
                         <SelectItem value="manufacturer">Manufacturer</SelectItem>
                         <SelectItem value="distributor">Distributor</SelectItem>
                         <SelectItem value="pharmacy">Pharmacy</SelectItem>
@@ -160,12 +169,12 @@ export default function RegisterPage() {
 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="contact_person">Contact Person</Label>
+                    <Label htmlFor="contact_person" className="text-gray-700">Contact Person</Label>
                     <Input
                       id="contact_person"
                       placeholder="Name of primary contact"
                       {...register('contact_person')}
-                      className={errors.contact_person ? 'border-red-500' : ''}
+                      className={inputClassName(!!errors.contact_person)}
                     />
                     {errors.contact_person && (
                       <p className="mt-1 text-sm text-red-600">{errors.contact_person.message}</p>
@@ -173,13 +182,13 @@ export default function RegisterPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="phone">Phone Number</Label>
+                    <Label htmlFor="phone" className="text-gray-700">Phone Number</Label>
                     <Input
                       id="phone"
                       type="tel"
                       placeholder="(555) 123-4567"
                       {...register('phone')}
-                      className={errors.phone ? 'border-red-500' : ''}
+                      className={inputClassName(!!errors.phone)}
                     />
                     {errors.phone && (
                       <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
@@ -187,12 +196,12 @@ export default function RegisterPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="license_number">License Number</Label>
+                    <Label htmlFor="license_number" className="text-gray-700">License Number</Label>
                     <Input
                       id="license_number"
                       placeholder="Pharmaceutical license number"
                       {...register('license_number')}
-                      className={errors.license_number ? 'border-red-500' : ''}
+                      className={inputClassName(!!errors.license_number)}
                     />
                     {errors.license_number && (
                       <p className="mt-1 text-sm text-red-600">{errors.license_number.message}</p>
@@ -200,12 +209,12 @@ export default function RegisterPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="address">Address</Label>
+                    <Label htmlFor="address" className="text-gray-700">Address</Label>
                     <Input
                       id="address"
                       placeholder="Street address"
                       {...register('address')}
-                      className={errors.address ? 'border-red-500' : ''}
+                      className={inputClassName(!!errors.address)}
                     />
                     {errors.address && (
                       <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>
@@ -216,12 +225,12 @@ export default function RegisterPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                  <Label htmlFor="city">City</Label>
+                  <Label htmlFor="city" className="text-gray-700">City</Label>
                   <Input
                     id="city"
                     placeholder="City"
                     {...register('city')}
-                    className={errors.city ? 'border-red-500' : ''}
+                    className={inputClassName(!!errors.city)}
                   />
                   {errors.city && (
                     <p className="mt-1 text-sm text-red-600">{errors.city.message}</p>
@@ -229,12 +238,12 @@ export default function RegisterPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="state">State</Label>
+                  <Label htmlFor="state" className="text-gray-700">State</Label>
                   <Input
                     id="state"
                     placeholder="State"
                     {...register('state')}
-                    className={errors.state ? 'border-red-500' : ''}
+                    className={inputClassName(!!errors.state)}
                   />
                   {errors.state && (
                     <p className="mt-1 text-sm text-red-600">{errors.state.message}</p>
@@ -242,12 +251,12 @@ export default function RegisterPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="zip_code">ZIP Code</Label>
+                  <Label htmlFor="zip_code" className="text-gray-700">ZIP Code</Label>
                   <Input
                     id="zip_code"
                     placeholder="12345"
                     {...register('zip_code')}
-                    className={errors.zip_code ? 'border-red-500' : ''}
+                    className={inputClassName(!!errors.zip_code)}
                   />
                   {errors.zip_code && (
                     <p className="mt-1 text-sm text-red-600">{errors.zip_code.message}</p>
@@ -256,7 +265,7 @@ export default function RegisterPage() {
               </div>
 
               {errors.root && (
-                <div className="rounded-md bg-red-50 p-4">
+                <div className="rounded-md bg-red-50 p-4 border border-red-200">
                   <p className="text-sm text-red-800">{errors.root.message}</p>
                 </div>
               )}
@@ -277,23 +286,21 @@ export default function RegisterPage() {
               </Button>
             </form>
 
-            <div className="mt-6">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">Already have an account?</span>
-                </div>
-              </div>
+            {/* OAuth Section - below form */}
+            <OAuthDivider text="or" />
 
-              <div className="mt-6">
-                <Link href="/login">
-                  <Button variant="outline" className="w-full">
-                    Sign In
-                  </Button>
+            <OAuthButtons
+              mode="register"
+              onError={(error) => setError('root', { message: error })}
+            />
+
+            <div className="text-center pt-4 border-t border-gray-200">
+              <p className="text-sm text-gray-600">
+                Already have an account?{' '}
+                <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+                  Sign in
                 </Link>
-              </div>
+              </p>
             </div>
           </CardContent>
         </Card>

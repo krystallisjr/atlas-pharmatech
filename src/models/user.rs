@@ -4,6 +4,43 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use validator::Validate;
 
+/// User role enum matching database user_role type
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "user_role", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+pub enum UserRole {
+    User,
+    Admin,
+    Superadmin,
+}
+
+impl UserRole {
+    /// Check if role has admin privileges
+    pub fn is_admin(&self) -> bool {
+        matches!(self, UserRole::Admin | UserRole::Superadmin)
+    }
+
+    /// Check if role has superadmin privileges
+    pub fn is_superadmin(&self) -> bool {
+        matches!(self, UserRole::Superadmin)
+    }
+
+    /// Get role display name
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            UserRole::User => "User",
+            UserRole::Admin => "Admin",
+            UserRole::Superadmin => "Super Admin",
+        }
+    }
+}
+
+impl Default for UserRole {
+    fn default() -> Self {
+        UserRole::User
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: Uuid,
@@ -15,6 +52,7 @@ pub struct User {
     pub address: Option<String>,
     pub license_number: Option<String>,
     pub is_verified: bool,
+    pub role: UserRole,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -54,6 +92,7 @@ pub struct UserResponse {
     pub address: Option<String>,
     pub license_number: Option<String>,
     pub is_verified: bool,
+    pub role: UserRole,
     pub created_at: DateTime<Utc>,
 }
 
@@ -68,6 +107,7 @@ impl From<User> for UserResponse {
             address: user.address,
             license_number: user.license_number,
             is_verified: user.is_verified,
+            role: user.role,
             created_at: user.created_at,
         }
     }

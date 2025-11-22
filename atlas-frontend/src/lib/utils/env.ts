@@ -54,7 +54,7 @@ export function validateEnvironment(): void {
  */
 export const env: EnvironmentVariables = {
   NEXT_PUBLIC_API_URL: requireEnv('NEXT_PUBLIC_API_URL', 'http://localhost:8080'),
-  NEXT_PUBLIC_APP_NAME: requireEnv('NEXT_PUBLIC_APP_NAME', 'Atlas Pharma'),
+  NEXT_PUBLIC_APP_NAME: requireEnv('NEXT_PUBLIC_APP_NAME', 'Atlas PharmaTech'),
   NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
 };
 

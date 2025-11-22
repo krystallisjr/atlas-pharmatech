@@ -9,7 +9,7 @@ export type SyncDirection = 'atlas_to_erp' | 'erp_to_atlas' | 'bidirectional';
 
 export type SyncStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'partial';
 
-export type MappingStatus = 'suggested' | 'approved' | 'rejected' | 'active';
+export type MappingStatusType = 'suggested' | 'approved' | 'rejected' | 'active';
 
 export type ConflictResolutionStrategy = 'atlas_wins' | 'erp_wins' | 'manual_review' | 'merge' | 'reject_sync';
 

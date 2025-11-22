@@ -1,4 +1,4 @@
-// AI Import Types for Atlas Pharma
+// AI Import Types for Atlas PharmaTech
 
 export interface AiImportSession {
   id: string;

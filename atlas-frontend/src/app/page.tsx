@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/auth-context'
+import { AtlasLogo } from '@/components/atlas-logo'
 import {
   Package,
   TrendingUp,
@@ -13,10 +14,9 @@ import {
 } from 'lucide-react'
 
 export default function HomePage() {
-  const { isAuthenticated, user } = useAuth()
+  const { isAuthenticated } = useAuth()
 
   if (isAuthenticated) {
-    // Redirect to dashboard if already authenticated
     if (typeof window !== 'undefined') {
       window.location.href = '/dashboard'
     }
@@ -26,13 +26,16 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">Atlas PharmaTech</h1>
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center space-x-3">
+              <AtlasLogo size={36} className="flex-shrink-0" />
+              <span className="text-xl font-bold tracking-tight text-gray-900">
+                Atlas PharmaTech
+              </span>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               <Link href="/login">
                 <Button variant="ghost">Sign In</Button>
               </Link>
@@ -45,111 +48,107 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-16">
         <div className="text-center">
-          <h1 className="text-4xl font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
+          <h1 className="text-4xl font-bold tracking-tight leading-tight text-gray-900 sm:text-5xl md:text-6xl">
             Pharmaceutical Inventory
-            <span className="block text-blue-600">Management & Trading</span>
+            <span className="block text-blue-600 mt-1">
+              Management & Trading
+            </span>
           </h1>
-          <p className="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
+          <p className="mt-6 max-w-2xl mx-auto text-lg text-gray-600 leading-relaxed">
             Connect with pharmaceutical companies nationwide. Manage inventory, track expirations, and trade medications securely on Atlas.
           </p>
-          <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
-            <div className="rounded-md shadow">
-              <Link href="/register">
-                <Button size="lg" className="w-full">
-                  Start Trading Today
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-            </div>
-            <div className="mt-3 rounded-md shadow sm:mt-0 sm:ml-3">
-              <Link href="/login">
-                <Button variant="outline" size="lg" className="w-full">
-                  Sign In
-                </Button>
-              </Link>
-            </div>
+          <div className="mt-8 flex flex-col sm:flex-row justify-center gap-4">
+            <Link href="/register">
+              <Button size="lg" className="w-full sm:w-auto px-8">
+                Start Trading Today
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+            <Link href="/login">
+              <Button variant="outline" size="lg" className="w-full sm:w-auto px-8">
+                Sign In
+              </Button>
+            </Link>
           </div>
         </div>
 
         {/* Features Section */}
-        <div className="mt-20">
+        <div className="mt-24">
           <div className="text-center">
-            <h2 className="text-3xl font-extrabold text-gray-900">
+            <h2 className="text-3xl font-bold tracking-tight text-gray-900">
               Built for Pharmaceutical Industry
             </h2>
-            <p className="mt-4 max-w-2xl mx-auto text-xl text-gray-500">
+            <p className="mt-4 max-w-2xl mx-auto text-lg text-gray-600">
               Professional-grade inventory management with compliance and security at its core.
             </p>
           </div>
 
-          <div className="mt-12">
-            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardHeader>
-                  <Package className="h-8 w-8 text-blue-600" />
-                  <CardTitle>Inventory Management</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription>
-                    Track pharmaceutical products, monitor expiry dates, and manage stock levels with real-time updates.
-                  </CardDescription>
-                </CardContent>
-              </Card>
+          <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="bg-white border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-2">
+                <Package className="h-8 w-8 text-blue-600 mb-2" />
+                <CardTitle className="text-gray-900">Inventory Management</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-gray-600">
+                  Track pharmaceutical products, monitor expiry dates, and manage stock levels with real-time updates.
+                </CardDescription>
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader>
-                  <Users className="h-8 w-8 text-blue-600" />
-                  <CardTitle>Marketplace</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription>
-                    Connect with verified pharmaceutical companies. Buy and sell medications with confidence.
-                  </CardDescription>
-                </CardContent>
-              </Card>
+            <Card className="bg-white border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-2">
+                <Users className="h-8 w-8 text-blue-600 mb-2" />
+                <CardTitle className="text-gray-900">Marketplace</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-gray-600">
+                  Connect with verified pharmaceutical companies. Buy and sell medications with confidence.
+                </CardDescription>
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader>
-                  <Shield className="h-8 w-8 text-blue-600" />
-                  <CardTitle>Compliance & Security</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription>
-                    Built for regulatory compliance with SOC 2, HIPAA, and ISO 27001 standards. Complete audit trails, FDA data integration, and secure document management.
-                  </CardDescription>
-                </CardContent>
-              </Card>
+            <Card className="bg-white border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-2">
+                <Shield className="h-8 w-8 text-blue-600 mb-2" />
+                <CardTitle className="text-gray-900">Compliance & Security</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-gray-600">
+                  Built for regulatory compliance with complete audit trails, FDA data integration, and secure document management.
+                </CardDescription>
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader>
-                  <TrendingUp className="h-8 w-8 text-blue-600" />
-                  <CardTitle>Analytics & Insights</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription>
-                    Advanced reporting, expiry forecasting, and business intelligence for pharmaceutical operations.
-                  </CardDescription>
-                </CardContent>
-              </Card>
-            </div>
+            <Card className="bg-white border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-2">
+                <TrendingUp className="h-8 w-8 text-blue-600 mb-2" />
+                <CardTitle className="text-gray-900">Analytics & Insights</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-gray-600">
+                  Advanced reporting, expiry forecasting, and business intelligence for pharmaceutical operations.
+                </CardDescription>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
         {/* CTA Section */}
-        <div className="mt-20 bg-blue-600 rounded-lg shadow-xl overflow-hidden">
+        <div className="mt-24 bg-blue-600 rounded-2xl shadow-xl overflow-hidden">
           <div className="px-6 py-12 sm:px-12 sm:py-16 lg:px-16">
             <div className="text-center">
-              <h2 className="text-3xl font-extrabold text-white">
+              <h2 className="text-3xl font-bold tracking-tight text-white">
                 Ready to streamline your pharmaceutical operations?
               </h2>
-              <p className="mt-4 text-xl text-blue-100">
+              <p className="mt-4 text-lg text-blue-100">
                 Join hundreds of pharmaceutical companies already using Atlas.
               </p>
               <div className="mt-8">
                 <Link href="/register">
-                  <Button size="lg" variant="secondary">
+                  <Button size="lg" variant="secondary" className="px-8">
                     Get Started
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
@@ -161,10 +160,16 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white">
-        <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <p className="text-base text-gray-500">
+      <footer className="bg-white border-t border-gray-200">
+        <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="flex items-center space-x-2">
+              <AtlasLogo size={24} />
+              <span className="text-sm font-medium text-gray-600">
+                Atlas PharmaTech
+              </span>
+            </div>
+            <p className="text-sm text-gray-500">
               &copy; 2024 Atlas PharmaTech. Built for the pharmaceutical industry.
             </p>
           </div>

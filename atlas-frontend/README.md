@@ -1,4 +1,4 @@
-# Atlas Pharma Frontend 🏥
+# Atlas PharmaTech Frontend 🏥
 
 A production-ready pharmaceutical inventory management and marketplace platform built with Next.js 15, TypeScript, and modern web technologies.
 
@@ -55,7 +55,7 @@ A production-ready pharmaceutical inventory management and marketplace platform 
 
 - **Node.js**: v16.0.0 or higher
 - **npm** or **yarn**: Latest version
-- **Atlas Pharma Backend**: Running on `http://localhost:8080`
+- **Atlas PharmaTech Backend**: Running on `http://localhost:8080`
 
 ## 🛠️ Installation & Setup
 
@@ -77,7 +77,7 @@ Create a `.env.local` file in the root directory:
 NEXT_PUBLIC_API_URL=http://localhost:8080
 
 # Optional
-NEXT_PUBLIC_APP_NAME="Atlas Pharma"
+NEXT_PUBLIC_APP_NAME="Atlas PharmaTech"
 ```
 
 ### 4. Start Development Server
@@ -255,7 +255,7 @@ npm start
 ### Environment Variables for Production
 ```env
 NEXT_PUBLIC_API_URL=https://your-api-domain.com
-NEXT_PUBLIC_APP_NAME="Atlas Pharma"
+NEXT_PUBLIC_APP_NAME="Atlas PharmaTech"
 NODE_ENV=production
 ```
 
@@ -341,7 +341,7 @@ This is a production application. For questions or support:
 
 ## 📄 License
 
-Copyright © 2024 Atlas Pharma. All rights reserved.
+Copyright © 2024 Atlas PharmaTech. All rights reserved.
 
 ## 🆘 Support
 

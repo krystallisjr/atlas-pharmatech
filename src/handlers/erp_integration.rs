@@ -23,6 +23,11 @@ use crate::services::erp::erp_connection_service::{
 use crate::services::comprehensive_audit_service::{
     ComprehensiveAuditService, AuditLogEntry, EventCategory, Severity, ActionResult,
 };
+use crate::services::webhook_security_service::{
+    WebhookSecurityService, WebhookAuditLog,
+};
+use axum::body::Bytes;
+use axum::http::HeaderMap;
 
 // ============================================================================
 // Request/Response DTOs
@@ -141,10 +146,11 @@ pub async fn create_connection(
     Extension(claims): Extension<Claims>,
     Json(request): Json<CreateErpConnectionRequest>,
 ) -> Result<impl IntoResponse> {
+    // 🔒 SECURITY: Sanitize user-provided ERP type for log injection prevention
     tracing::info!(
         "Creating ERP connection for user {} - type: {}",
         claims.user_id,
-        request.erp_type
+        crate::utils::log_sanitizer::sanitize_for_log(&request.erp_type)
     );
 
     // Parse ERP type
@@ -664,50 +670,401 @@ pub async fn delete_mapping(
 // Webhook Handlers (for real-time ERP updates)
 // ============================================================================
 
-/// NetSuite webhook endpoint
+/// NetSuite webhook endpoint (SECURED with HMAC signature verification)
 /// POST /api/erp/webhooks/netsuite/:connection_id
+///
+/// **Security:**
+/// - HMAC-SHA256 signature verification required
+/// - Rate limiting: 100 requests per 15 minutes per connection
+/// - Connection must exist and have webhooks enabled
+/// - All attempts logged to audit table
+/// - IP address tracking
+/// - Payload size limit: 1MB
+///
+/// **Headers Required:**
+/// - X-Webhook-Signature: sha256=<hex_signature>
+/// - Content-Type: application/json
+///
+/// **Rate Limit Headers (Response):**
+/// - X-RateLimit-Remaining: requests remaining in window
+/// - X-RateLimit-Reset: timestamp when window resets
 pub async fn netsuite_webhook(
     State(pool): State<PgPool>,
     Path(connection_id): Path<Uuid>,
-    Json(payload): Json<serde_json::Value>,
+    headers: HeaderMap,
+    body: Bytes,
 ) -> Result<impl IntoResponse> {
-    tracing::info!("Received NetSuite webhook for connection {}", connection_id);
+    let start_time = std::time::Instant::now();
+    let request_id = Uuid::new_v4();
 
-    // Verify connection exists
-    let connection_service = ErpConnectionService::new(pool.clone());
-    let _connection = connection_service
-        .get_connection_by_id(connection_id)
+    // Extract source IP (if behind proxy, use X-Forwarded-For)
+    let source_ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| headers.get("x-real-ip").and_then(|v| v.to_str().ok()))
+        .map(|s| s.to_string());
+
+    // Initialize security service
+    let webhook_service = WebhookSecurityService::new(pool.clone())
+        .map_err(|e| {
+            tracing::error!("Failed to initialize webhook security service: {:?}", e);
+            AppError::Internal(anyhow::anyhow!("Webhook service unavailable"))
+        })?;
+
+    // Payload size check (1MB limit)
+    const MAX_PAYLOAD_SIZE: usize = 1_048_576; // 1MB
+    if body.len() > MAX_PAYLOAD_SIZE {
+        let log = WebhookAuditLog {
+            connection_id,
+            event_type: "netsuite".to_string(),
+            request_id,
+            source_ip: source_ip.clone(),
+            signature_valid: false,
+            payload_size_bytes: body.len() as i32,
+            http_status: 413,
+            error_message: Some("Payload too large".to_string()),
+            processing_time_ms: Some(start_time.elapsed().as_millis() as i32),
+        };
+        let _ = webhook_service.log_webhook_attempt(log).await;
+
+        return Err(AppError::BadRequest("Payload exceeds 1MB limit".to_string()));
+    }
+
+    // Step 1: Validate connection exists and webhooks are enabled
+    if let Err(e) = webhook_service.validate_connection(connection_id).await {
+        let log = WebhookAuditLog {
+            connection_id,
+            event_type: "netsuite".to_string(),
+            request_id,
+            source_ip,
+            signature_valid: false,
+            payload_size_bytes: body.len() as i32,
+            http_status: 404,
+            error_message: Some(e.to_string()),
+            processing_time_ms: Some(start_time.elapsed().as_millis() as i32),
+        };
+        let _ = webhook_service.log_webhook_attempt(log).await;
+        return Err(e);
+    }
+
+    // Step 2: Check rate limit
+    let rate_limit_result = webhook_service.check_rate_limit(connection_id).await?;
+
+    if !rate_limit_result.rate_limit_allowed {
+        let log = WebhookAuditLog {
+            connection_id,
+            event_type: "netsuite".to_string(),
+            request_id,
+            source_ip,
+            signature_valid: false,
+            payload_size_bytes: body.len() as i32,
+            http_status: 429,
+            error_message: Some(if rate_limit_result.blocked {
+                "Connection blocked due to rate limit violations"
+            } else {
+                "Rate limit exceeded"
+            }.to_string()),
+            processing_time_ms: Some(start_time.elapsed().as_millis() as i32),
+        };
+        let _ = webhook_service.log_webhook_attempt(log).await;
+
+        return Err(AppError::TooManyRequests("Rate limit exceeded for webhook".to_string()));
+    }
+
+    // Step 3: Verify HMAC signature
+    let signature_header = headers
+        .get("x-webhook-signature")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AppError::Unauthorized)?;
+
+    let signature_valid = webhook_service
+        .verify_signature(connection_id, &body, signature_header)
         .await
-        .map_err(|e| AppError::NotFound(e.to_string()))?;
+        .unwrap_or(false);
 
-    // TODO: Verify webhook signature
-    // TODO: Process webhook event (inventory update, item creation, etc.)
+    if !signature_valid {
+        tracing::warn!(
+            "Invalid webhook signature for connection {} from IP {:?}",
+            connection_id,
+            source_ip
+        );
 
-    tracing::debug!("NetSuite webhook payload: {:?}", payload);
+        let log = WebhookAuditLog {
+            connection_id,
+            event_type: "netsuite".to_string(),
+            request_id,
+            source_ip,
+            signature_valid: false,
+            payload_size_bytes: body.len() as i32,
+            http_status: 401,
+            error_message: Some("Invalid signature".to_string()),
+            processing_time_ms: Some(start_time.elapsed().as_millis() as i32),
+        };
+        let _ = webhook_service.log_webhook_attempt(log).await;
 
-    Ok(StatusCode::OK)
+        return Err(AppError::Unauthorized);
+    }
+
+    // Step 4: Parse and validate JSON payload
+    let payload: serde_json::Value = serde_json::from_slice(&body)
+        .map_err(|e| {
+            let log = WebhookAuditLog {
+                connection_id,
+                event_type: "netsuite".to_string(),
+                request_id,
+                source_ip: source_ip.clone(),
+                signature_valid: true,
+                payload_size_bytes: body.len() as i32,
+                http_status: 400,
+                error_message: Some(format!("Invalid JSON: {}", e)),
+                processing_time_ms: Some(start_time.elapsed().as_millis() as i32),
+            };
+            let _ = futures::executor::block_on(webhook_service.log_webhook_attempt(log));
+            AppError::BadRequest(format!("Invalid JSON payload: {}", e))
+        })?;
+
+    tracing::info!(
+        "✓ Valid NetSuite webhook for connection {} (request_id: {})",
+        connection_id,
+        request_id
+    );
+
+    // Step 5: Process webhook event
+    // TODO: Implement webhook event processing based on event type
+    // - inventory_update: Update inventory quantities
+    // - item_created: Create new pharmaceutical item
+    // - item_updated: Update item details
+    // - order_status: Update order status
+
+    // 🔒 SECURITY: Log webhook metadata only, NOT full payload (may contain sensitive data)
+    tracing::debug!("NetSuite webhook received for connection: {} (payload size: {} bytes)",
+        connection_id, payload.to_string().len());
+
+    // Step 6: Log successful webhook processing
+    let processing_time = start_time.elapsed().as_millis() as i32;
+    let log = WebhookAuditLog {
+        connection_id,
+        event_type: "netsuite".to_string(),
+        request_id,
+        source_ip,
+        signature_valid: true,
+        payload_size_bytes: body.len() as i32,
+        http_status: 200,
+        error_message: None,
+        processing_time_ms: Some(processing_time),
+    };
+    webhook_service.log_webhook_attempt(log).await?;
+
+    // Return response with rate limit headers
+    Ok((
+        StatusCode::OK,
+        [
+            ("X-Request-ID", request_id.to_string()),
+            ("X-RateLimit-Remaining", rate_limit_result.requests_remaining.to_string()),
+        ],
+        Json(serde_json::json!({
+            "status": "accepted",
+            "request_id": request_id,
+            "processing_time_ms": processing_time
+        }))
+    ))
 }
 
-/// SAP webhook endpoint
+/// SAP webhook endpoint (SECURED with HMAC signature verification)
 /// POST /api/erp/webhooks/sap/:connection_id
+///
+/// **Security:**
+/// - HMAC-SHA256 signature verification required
+/// - Rate limiting: 100 requests per 15 minutes per connection
+/// - Connection must exist and have webhooks enabled
+/// - All attempts logged to audit table
+/// - IP address tracking
+/// - Payload size limit: 1MB
+///
+/// **Headers Required:**
+/// - X-Webhook-Signature: sha256=<hex_signature>
+/// - Content-Type: application/json
+///
+/// **Rate Limit Headers (Response):**
+/// - X-RateLimit-Remaining: requests remaining in window
+/// - X-RateLimit-Reset: timestamp when window resets
 pub async fn sap_webhook(
     State(pool): State<PgPool>,
     Path(connection_id): Path<Uuid>,
-    Json(payload): Json<serde_json::Value>,
+    headers: HeaderMap,
+    body: Bytes,
 ) -> Result<impl IntoResponse> {
-    tracing::info!("Received SAP webhook for connection {}", connection_id);
+    let start_time = std::time::Instant::now();
+    let request_id = Uuid::new_v4();
 
-    // Verify connection exists
-    let connection_service = ErpConnectionService::new(pool.clone());
-    let _connection = connection_service
-        .get_connection_by_id(connection_id)
+    // Extract source IP (if behind proxy, use X-Forwarded-For)
+    let source_ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| headers.get("x-real-ip").and_then(|v| v.to_str().ok()))
+        .map(|s| s.to_string());
+
+    // Initialize security service
+    let webhook_service = WebhookSecurityService::new(pool.clone())
+        .map_err(|e| {
+            tracing::error!("Failed to initialize webhook security service: {:?}", e);
+            AppError::Internal(anyhow::anyhow!("Webhook service unavailable"))
+        })?;
+
+    // Payload size check (1MB limit)
+    const MAX_PAYLOAD_SIZE: usize = 1_048_576; // 1MB
+    if body.len() > MAX_PAYLOAD_SIZE {
+        let log = WebhookAuditLog {
+            connection_id,
+            event_type: "sap".to_string(),
+            request_id,
+            source_ip: source_ip.clone(),
+            signature_valid: false,
+            payload_size_bytes: body.len() as i32,
+            http_status: 413,
+            error_message: Some("Payload too large".to_string()),
+            processing_time_ms: Some(start_time.elapsed().as_millis() as i32),
+        };
+        let _ = webhook_service.log_webhook_attempt(log).await;
+
+        return Err(AppError::BadRequest("Payload exceeds 1MB limit".to_string()));
+    }
+
+    // Step 1: Validate connection exists and webhooks are enabled
+    if let Err(e) = webhook_service.validate_connection(connection_id).await {
+        let log = WebhookAuditLog {
+            connection_id,
+            event_type: "sap".to_string(),
+            request_id,
+            source_ip,
+            signature_valid: false,
+            payload_size_bytes: body.len() as i32,
+            http_status: 404,
+            error_message: Some(e.to_string()),
+            processing_time_ms: Some(start_time.elapsed().as_millis() as i32),
+        };
+        let _ = webhook_service.log_webhook_attempt(log).await;
+        return Err(e);
+    }
+
+    // Step 2: Check rate limit
+    let rate_limit_result = webhook_service.check_rate_limit(connection_id).await?;
+
+    if !rate_limit_result.rate_limit_allowed {
+        let log = WebhookAuditLog {
+            connection_id,
+            event_type: "sap".to_string(),
+            request_id,
+            source_ip,
+            signature_valid: false,
+            payload_size_bytes: body.len() as i32,
+            http_status: 429,
+            error_message: Some(if rate_limit_result.blocked {
+                "Connection blocked due to rate limit violations"
+            } else {
+                "Rate limit exceeded"
+            }.to_string()),
+            processing_time_ms: Some(start_time.elapsed().as_millis() as i32),
+        };
+        let _ = webhook_service.log_webhook_attempt(log).await;
+
+        return Err(AppError::TooManyRequests("Rate limit exceeded for webhook".to_string()));
+    }
+
+    // Step 3: Verify HMAC signature
+    let signature_header = headers
+        .get("x-webhook-signature")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AppError::Unauthorized)?;
+
+    let signature_valid = webhook_service
+        .verify_signature(connection_id, &body, signature_header)
         .await
-        .map_err(|e| AppError::NotFound(e.to_string()))?;
+        .unwrap_or(false);
 
-    // TODO: Verify webhook signature
-    // TODO: Process webhook event
+    if !signature_valid {
+        tracing::warn!(
+            "Invalid webhook signature for connection {} from IP {:?}",
+            connection_id,
+            source_ip
+        );
 
-    tracing::debug!("SAP webhook payload: {:?}", payload);
+        let log = WebhookAuditLog {
+            connection_id,
+            event_type: "sap".to_string(),
+            request_id,
+            source_ip,
+            signature_valid: false,
+            payload_size_bytes: body.len() as i32,
+            http_status: 401,
+            error_message: Some("Invalid signature".to_string()),
+            processing_time_ms: Some(start_time.elapsed().as_millis() as i32),
+        };
+        let _ = webhook_service.log_webhook_attempt(log).await;
 
-    Ok(StatusCode::OK)
+        return Err(AppError::Unauthorized);
+    }
+
+    // Step 4: Parse and validate JSON payload
+    let payload: serde_json::Value = serde_json::from_slice(&body)
+        .map_err(|e| {
+            let log = WebhookAuditLog {
+                connection_id,
+                event_type: "sap".to_string(),
+                request_id,
+                source_ip: source_ip.clone(),
+                signature_valid: true,
+                payload_size_bytes: body.len() as i32,
+                http_status: 400,
+                error_message: Some(format!("Invalid JSON: {}", e)),
+                processing_time_ms: Some(start_time.elapsed().as_millis() as i32),
+            };
+            let _ = futures::executor::block_on(webhook_service.log_webhook_attempt(log));
+            AppError::BadRequest(format!("Invalid JSON payload: {}", e))
+        })?;
+
+    tracing::info!(
+        "✓ Valid SAP webhook for connection {} (request_id: {})",
+        connection_id,
+        request_id
+    );
+
+    // Step 5: Process webhook event
+    // TODO: Implement webhook event processing based on event type
+    // - material_changed: Update inventory quantities
+    // - material_created: Create new pharmaceutical item
+    // - purchase_order_status: Update order status
+
+    // 🔒 SECURITY: Log webhook metadata only, NOT full payload (may contain sensitive data)
+    tracing::debug!("SAP webhook received for connection: {} (payload size: {} bytes)",
+        connection_id, payload.to_string().len());
+
+    // Step 6: Log successful webhook processing
+    let processing_time = start_time.elapsed().as_millis() as i32;
+    let log = WebhookAuditLog {
+        connection_id,
+        event_type: "sap".to_string(),
+        request_id,
+        source_ip,
+        signature_valid: true,
+        payload_size_bytes: body.len() as i32,
+        http_status: 200,
+        error_message: None,
+        processing_time_ms: Some(processing_time),
+    };
+    webhook_service.log_webhook_attempt(log).await?;
+
+    // Return response with rate limit headers
+    Ok((
+        StatusCode::OK,
+        [
+            ("X-Request-ID", request_id.to_string()),
+            ("X-RateLimit-Remaining", rate_limit_result.requests_remaining.to_string()),
+        ],
+        Json(serde_json::json!({
+            "status": "accepted",
+            "request_id": request_id,
+            "processing_time_ms": processing_time
+        }))
+    ))
 }

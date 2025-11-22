@@ -251,23 +251,6 @@ export function AiAssistantSidebar({ isOpen, onClose }: AiAssistantSidebarProps)
           </Button>
         </div>
 
-        {/* Quota Bar */}
-        {quota && (
-          <div className="px-4 py-3 border-b bg-muted/30">
-            <div className="flex items-center justify-between text-sm mb-1.5">
-              <span className="flex items-center gap-1.5 text-muted-foreground">
-                <Zap className="h-3.5 w-3.5 text-yellow-500" />
-                Queries: {quota.queries_used}/{quota.query_limit}
-              </span>
-              <span className="font-semibold text-green-600">{quota.queries_remaining} left</span>
-            </div>
-            <Progress
-              value={(quota.queries_used / quota.query_limit) * 100}
-              className="h-1.5"
-            />
-          </div>
-        )}
-
         {/* Messages */}
         <div className="flex-1 p-4 overflow-y-auto" ref={scrollRef}>
           <div className="space-y-4">
@@ -287,7 +270,7 @@ export function AiAssistantSidebar({ isOpen, onClose }: AiAssistantSidebarProps)
                     message.type === 'assistant' &&
                       'bg-muted border',
                     message.type === 'system' &&
-                      'bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-100 border border-blue-200 dark:border-blue-800'
+                      'bg-blue-50 text-blue-900 border border-blue-200'
                   )}
                 >
                   {/* Message content */}

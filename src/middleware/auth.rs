@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 use crate::config::AppConfig;
+use crate::models::user::UserRole;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -18,9 +19,22 @@ pub struct Claims {
     pub email: String,
     pub company_name: String,
     pub is_verified: bool,
+    pub role: UserRole,
     pub exp: usize,
     pub iat: usize,
     pub jti: String,  // JWT ID for token blacklist
+}
+
+impl Claims {
+    /// Check if user has admin privileges
+    pub fn is_admin(&self) -> bool {
+        self.role.is_admin()
+    }
+
+    /// Check if user has superadmin privileges
+    pub fn is_superadmin(&self) -> bool {
+        self.role.is_superadmin()
+    }
 }
 
 pub struct JwtService {
@@ -36,13 +50,19 @@ impl JwtService {
         }
     }
 
-    pub fn generate_token(&self, user_id: Uuid, email: &str, company_name: &str, is_verified: bool) -> Result<String, jsonwebtoken::errors::Error> {
+    pub fn generate_token(&self, user_id: Uuid, email: &str, company_name: &str, is_verified: bool, role: UserRole) -> Result<String, jsonwebtoken::errors::Error> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as usize;
 
-        let exp = now + 24 * 60 * 60; // 24 hours
+        // Admin session timeout: 2 hours (more secure)
+        // Regular user: 24 hours
+        let exp = if role.is_admin() {
+            now + 2 * 60 * 60  // 2 hours for admins
+        } else {
+            now + 24 * 60 * 60  // 24 hours for regular users
+        };
 
         let claims = Claims {
             sub: user_id.to_string(),
@@ -50,6 +70,7 @@ impl JwtService {
             email: email.to_string(),
             company_name: company_name.to_string(),
             is_verified,
+            role,
             exp,
             iat: now,
             jti: Uuid::new_v4().to_string(),  // Unique token ID for blacklist tracking

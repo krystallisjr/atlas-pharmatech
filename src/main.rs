@@ -34,6 +34,20 @@ use atlas_pharma::handlers::{
     openfda::{
         search_catalog, get_by_ndc, get_stats, trigger_sync,
         get_manufacturers as get_openfda_manufacturers,
+        get_sync_progress, get_active_sync, get_sync_logs as get_openfda_sync_logs,
+        cancel_sync, check_refresh_status as openfda_check_refresh_status,
+        cleanup_sync_logs as openfda_cleanup_sync_logs, health_check as openfda_health_check,
+    },
+    ema::{
+        search_catalog as ema_search_catalog,
+        get_by_eu_number,
+        get_stats as ema_get_stats,
+        trigger_sync as ema_trigger_sync,
+        get_sync_logs,
+        check_refresh_status,
+        get_config_info as ema_get_config_info,
+        cleanup_sync_logs,
+        health_check as ema_health_check,
     },
     ai_import::{
         upload_and_analyze, list_sessions, get_session,
@@ -46,9 +60,12 @@ use atlas_pharma::handlers::{
 use atlas_pharma::middleware::auth_middleware;
 
 pub fn create_app(config: AppConfig) -> Router {
+    // 🔒 PRODUCTION LOGGING CONFIGURATION
+    // Default to INFO level (not DEBUG) to prevent verbose logging in production
+    // Override with RUST_LOG environment variable for debugging
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "atlas_pharma=debug,tower_http=debug".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "atlas_pharma=info,tower_http=info,sqlx=warn".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -63,12 +80,45 @@ pub fn create_app(config: AppConfig) -> Router {
     // 📋 PRODUCTION AUDIT LOGGING (compliance: SOC 2, HIPAA, ISO 27001)
     let audit_service = Arc::new(atlas_pharma::services::ComprehensiveAuditService::new(config.database_pool.clone()));
 
-    // SECURITY: Strict CORS policy - only allow whitelisted origins
+    // 🔒 SECURITY: Strict CORS policy - only allow whitelisted origins
+    // Validate CORS origins for security issues
+    for origin in &config.cors_origins {
+        // ⚠️  WARNING: Check for insecure origin patterns
+        if origin.starts_with("http://") && !origin.contains("localhost") {
+            tracing::warn!(
+                "⚠️  SECURITY WARNING: Insecure HTTP origin in CORS: {} (use HTTPS in production!)",
+                origin
+            );
+        }
+
+        // ⚠️  WARNING: Check for IP-based origins (not recommended)
+        if origin.contains("://") {
+            let host_part = origin.split("://").nth(1).unwrap_or("");
+            let host = host_part.split(':').next().unwrap_or("");
+            if host.parse::<std::net::IpAddr>().is_ok() {
+                tracing::warn!(
+                    "⚠️  SECURITY WARNING: IP-based CORS origin: {} (use domain names in production!)",
+                    origin
+                );
+            }
+        }
+    }
+
     let cors_origins: Vec<HeaderValue> = config
         .cors_origins
         .iter()
-        .filter_map(|origin| origin.parse().ok())
+        .filter_map(|origin| {
+            match origin.parse() {
+                Ok(header_val) => Some(header_val),
+                Err(e) => {
+                    tracing::error!("❌ Invalid CORS origin '{}': {}", origin, e);
+                    None
+                }
+            }
+        })
         .collect();
+
+    tracing::info!("✅ CORS configured with {} allowed origins", cors_origins.len());
 
     let cors = CorsLayer::new()
         .allow_origin(cors_origins)
@@ -97,8 +147,62 @@ pub fn create_app(config: AppConfig) -> Router {
                         .route("/logout", post(logout))
                         .route("/profile", get(get_profile))
                         .route("/profile", put(update_profile))
+                        .route("/change-password", post(atlas_pharma::handlers::auth::change_password))  // 🔒 SECURITY: Password change with session invalidation
                         .route("/delete", delete(delete_account))
                         .layer(middleware::from_fn_with_state(config.clone(), auth_middleware))
+                )
+                // OAuth routes (public - redirect to provider)
+                .merge(
+                    Router::new()
+                        .route("/oauth/providers", get(atlas_pharma::handlers::oauth::get_oauth_providers))
+                        .route("/oauth/:provider", get(atlas_pharma::handlers::oauth::oauth_start))
+                        .route("/oauth/:provider/callback", get(atlas_pharma::handlers::oauth::oauth_callback))
+                )
+                // OAuth account linking (auth required)
+                .merge(
+                    Router::new()
+                        .route("/oauth/link/:provider", post(atlas_pharma::handlers::oauth::oauth_link_start))
+                        .route("/oauth/unlink/:provider", post(atlas_pharma::handlers::oauth::oauth_unlink))
+                        .layer(middleware::from_fn_with_state(config.clone(), auth_middleware))
+                )
+        )
+        .nest(
+            "/api/admin",
+            Router::new()
+                // Admin health check (public - for monitoring)
+                .route("/health", get(atlas_pharma::handlers::admin::health_check))
+                // Admin-only endpoints (require admin or superadmin role)
+                .merge(
+                    Router::new()
+                        // User management
+                        .route("/users", get(atlas_pharma::handlers::admin::list_users))
+                        .route("/users/:id", get(atlas_pharma::handlers::admin::get_user))
+                        .route("/users/:id/verify", post(atlas_pharma::handlers::admin::verify_user))
+                        // Verification queue
+                        .route("/verification-queue", get(atlas_pharma::handlers::admin::get_verification_queue))
+                        // Statistics
+                        .route("/stats", get(atlas_pharma::handlers::admin::get_admin_stats))
+                        // Audit logs
+                        .route("/audit-logs", get(atlas_pharma::handlers::admin::get_audit_logs))
+                        // Security monitoring (read-only)
+                        .route("/security/api-usage", get(atlas_pharma::handlers::admin_security::get_api_usage_analytics))
+                        .route("/security/quotas", get(atlas_pharma::handlers::admin_security::get_user_quotas))
+                        .route("/security/encryption", get(atlas_pharma::handlers::admin_security::get_encryption_status))
+                        .route("/security/metrics", get(atlas_pharma::handlers::admin_security::get_metrics_summary))
+                        .route("/security/rate-limits", get(atlas_pharma::handlers::admin_security::get_rate_limit_status))
+                        .layer(middleware::from_fn_with_state(config.clone(), auth_middleware))
+                        .layer(middleware::from_fn(atlas_pharma::middleware::admin_middleware))
+                )
+                // Superadmin-only endpoints (require superadmin role)
+                .merge(
+                    Router::new()
+                        .route("/users/:id/role", put(atlas_pharma::handlers::admin::change_user_role))
+                        .route("/users/:id", delete(atlas_pharma::handlers::admin::delete_user))
+                        // Security management (write operations)
+                        .route("/security/quotas/:user_id", put(atlas_pharma::handlers::admin_security::update_user_quota))
+                        .route("/security/encryption/rotate", post(atlas_pharma::handlers::admin_security::rotate_encryption_key))
+                        .layer(middleware::from_fn_with_state(config.clone(), auth_middleware))
+                        .layer(middleware::from_fn(atlas_pharma::middleware::superadmin_middleware))
                 )
         )
         .nest(
@@ -161,11 +265,34 @@ pub fn create_app(config: AppConfig) -> Router {
         .nest(
             "/api/openfda",
             Router::new()
+                // Public endpoints
                 .route("/search", get(search_catalog))
                 .route("/ndc/:ndc", get(get_by_ndc))
                 .route("/stats", get(get_stats))
                 .route("/manufacturers", get(get_openfda_manufacturers))
+                .route("/health", get(openfda_health_check))
+                .route("/refresh-status", get(openfda_check_refresh_status))
+                // Sync management (auth required)
                 .route("/sync", post(trigger_sync))
+                .route("/sync/active", get(get_active_sync))
+                .route("/sync/logs", get(get_openfda_sync_logs))
+                .route("/sync/:sync_id", get(get_sync_progress))
+                .route("/sync/:sync_id/cancel", post(cancel_sync))
+                .route("/cleanup", post(openfda_cleanup_sync_logs))
+                .layer(middleware::from_fn_with_state(config.clone(), auth_middleware))
+        )
+        .nest(
+            "/api/ema",
+            Router::new()
+                .route("/search", get(ema_search_catalog))
+                .route("/eu/:eu_number", get(get_by_eu_number))
+                .route("/stats", get(ema_get_stats))
+                .route("/sync", post(ema_trigger_sync))
+                .route("/sync/logs", get(get_sync_logs))
+                .route("/refresh-status", get(check_refresh_status))
+                .route("/config", get(ema_get_config_info))
+                .route("/cleanup", post(cleanup_sync_logs))
+                .route("/health", get(ema_health_check))
                 .layer(middleware::from_fn_with_state(config.clone(), auth_middleware))
         )
         .nest(
@@ -258,8 +385,14 @@ pub fn create_app(config: AppConfig) -> Router {
                 .with_state(config.database_pool.clone())
                 .layer(middleware::from_fn_with_state(config.clone(), auth_middleware))
         )
+        // 📊 OBSERVABILITY: Prometheus metrics endpoint (public)
+        .route("/metrics", get(atlas_pharma::middleware::metrics_handler))
         .layer(
             ServiceBuilder::new()
+                .layer(middleware::from_fn(atlas_pharma::middleware::metrics_middleware))  // 📊 OBSERVABILITY: Prometheus metrics collection
+                .layer(middleware::from_fn(atlas_pharma::middleware::content_type_validation_middleware))  // 🔒 SECURITY: Content-Type validation
+                .layer(middleware::from_fn(atlas_pharma::middleware::request_id_middleware))  // 📊 OBSERVABILITY: Request ID tracking for distributed tracing
+                .layer(middleware::from_fn(atlas_pharma::middleware::security_headers_middleware))  // 🔒 SECURITY: Production security headers (OWASP, PCI DSS, SOC 2)
                 .layer(axum::Extension(audit_service.clone()))  // 📋 Audit logging for compliance
                 .layer(axum::Extension(token_blacklist.clone()))  // 🔒 Token blacklist for logout/revocation
                 .layer(axum::Extension(api_rate_limiter))  // 🔒 Rate limiter for DDoS protection
@@ -306,6 +439,49 @@ async fn main() -> anyhow::Result<()> {
     let config = atlas_pharma::config::AppConfig::from_env().await?;
     let tls_config = atlas_pharma::config::tls::TlsConfig::from_env()?;
 
+    // Create app (this initializes the logger)
+    let app = create_app(config.clone());
+
+    // 🔒 SECURITY: Initialize API Quota Service
+    tracing::info!("🔐 Initializing API Quota Service...");
+    let quota_service = atlas_pharma::services::ApiQuotaService::new(config.database_pool.clone());
+
+    // Initialize default quotas for existing users (if not already set)
+    match quota_service.initialize_default_quotas().await {
+        Ok(count) => tracing::info!("✅ API Quota Service initialized ({} users configured)", count),
+        Err(e) => tracing::warn!("⚠️  Failed to initialize default quotas: {}", e),
+    }
+
+    // 🔐 SECURITY: Initialize Encryption Key Rotation Service
+    tracing::info!("🔐 Initializing Encryption Key Rotation Service...");
+    let key_rotation_service = atlas_pharma::services::EncryptionKeyRotationService::new(
+        config.database_pool.clone(),
+        config.encryption_key.clone()
+    );
+
+    // Initialize encryption keys if not already present
+    match key_rotation_service.initialize().await {
+        Ok(_) => tracing::info!("✅ Encryption Key Rotation Service initialized"),
+        Err(e) => {
+            tracing::error!("❌ Failed to initialize encryption keys: {}", e);
+            tracing::warn!("⚠️  Application may not function correctly without encryption keys!");
+        }
+    }
+
+    // Check if key rotation is recommended
+    match key_rotation_service.get_rotation_recommendation().await {
+        Ok(days_until) => {
+            if days_until <= 7 {
+                tracing::warn!("⚠️  Encryption key rotation recommended in {} days", days_until);
+            } else if days_until <= 0 {
+                tracing::error!("❌ Encryption key rotation OVERDUE by {} days", days_until.abs());
+            } else {
+                tracing::info!("✅ Next encryption key rotation in {} days", days_until);
+            }
+        }
+        Err(e) => tracing::warn!("⚠️  Could not check key rotation status: {}", e),
+    }
+
     // Start background alert scheduler
     let scheduler_pool = config.database_pool.clone();
     tokio::spawn(async move {
@@ -338,7 +514,15 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let app = create_app(config);
+    // Start OpenFDA sync scheduler (weekly sync)
+    let openfda_scheduler_pool = config.database_pool.clone();
+    tokio::spawn(async move {
+        use atlas_pharma::services::openfda_service::OpenFdaSyncScheduler;
+
+        let scheduler = OpenFdaSyncScheduler::new(openfda_scheduler_pool);
+        tracing::info!("📦 OpenFDA sync scheduler initialized");
+        scheduler.run().await;
+    });
 
     // Start server with TLS if enabled, otherwise use plain HTTP
     if tls_config.enabled {

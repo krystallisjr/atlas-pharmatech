@@ -121,7 +121,7 @@ impl InventoryRepository {
             SELECT
                 i.id, i.user_id, i.pharmaceutical_id, i.batch_number, i.quantity, i.expiry_date,
                 i.unit_price, i.storage_location, i.status, i.created_at, i.updated_at,
-                u.id as u_id, u.email, u.company_name, u.contact_person, u.phone, u.address, u.license_number, u.is_verified, u.created_at as user_created_at,
+                u.id as u_id, u.email, u.company_name, u.contact_person, u.phone, u.address, u.license_number, u.is_verified, u.role, u.created_at as user_created_at,
                 p.id as pharma_id, p.brand_name, p.generic_name, p.ndc_code, p.manufacturer, p.category, p.description, p.strength, p.dosage_form, p.storage_requirements, p.created_at as pharma_created_at
             FROM inventory i
             JOIN pharmaceuticals p ON i.pharmaceutical_id = p.id
@@ -265,6 +265,8 @@ impl InventoryRepository {
                     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to get license_number: {}", e)))?,
                 is_verified: row.try_get("is_verified")
                     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to get is_verified: {}", e)))?,
+                role: row.try_get("role")
+                    .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to get role: {}", e)))?,
                 created_at: row.try_get("user_created_at")
                     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to get user_created_at: {}", e)))?,
             };

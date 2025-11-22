@@ -11,9 +11,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/auth-context'
-import { LoginRequest } from '@/types/auth'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { MfaVerificationModal } from '@/components/mfa/MfaVerificationModal'
+import { OAuthButtons, OAuthDivider } from '@/components/auth/OAuthButtons'
+import { AtlasLogo } from '@/components/atlas-logo'
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -44,17 +45,11 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginFormData) => {
     try {
-      console.log('🚀 Login form submitted for:', data.email);
-      await login(data.email, data.password);
-      console.log('✅ Login function completed');
-
-      // Wait for auth context to update, then redirect
+      await login(data.email, data.password)
       setTimeout(() => {
-        console.log('🔄 Redirecting to dashboard...');
-        router.push('/dashboard');
-      }, 100);
+        router.push('/dashboard')
+      }, 100)
     } catch (error) {
-      console.error('❌ Login form error:', error);
       setError('root', {
         message: error instanceof Error ? error.message : 'Login failed',
       })
@@ -63,7 +58,6 @@ export default function LoginPage() {
 
   return (
     <>
-      {/* 🔐 MFA Verification Modal */}
       <MfaVerificationModal
         isOpen={mfaRequired}
         email={mfaEmail || ''}
@@ -75,36 +69,42 @@ export default function LoginPage() {
 
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            Sign in to Atlas Pharma
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Or{' '}
-            <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
-              create a new account
+          {/* Logo and Header */}
+          <div className="text-center">
+            <Link href="/" className="inline-flex items-center justify-center space-x-2 mb-6">
+              <AtlasLogo size={40} />
+              <span className="text-xl font-bold text-gray-900">Atlas PharmaTech</span>
             </Link>
-          </p>
-        </div>
+            <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+              Welcome back
+            </h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Don't have an account?{' '}
+              <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
+                Sign up
+              </Link>
+            </p>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Welcome Back</CardTitle>
-            <CardDescription>
-              Sign in to your pharmaceutical marketplace account
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              <div className="space-y-4">
+          <Card className="bg-white border-gray-200 shadow-lg">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-gray-900">Sign in</CardTitle>
+              <CardDescription className="text-gray-600">
+                Enter your credentials to access your account
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
-                  <Label htmlFor="email">Email Address</Label>
+                  <Label htmlFor="email" className="text-gray-700">
+                    Email Address
+                  </Label>
                   <Input
                     id="email"
                     type="email"
-                    placeholder="Enter your email"
+                    placeholder="you@company.com"
                     {...register('email')}
-                    className={errors.email ? 'border-red-500' : ''}
+                    className={`mt-1 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 ${errors.email ? 'border-red-500' : ''}`}
                   />
                   {errors.email && (
                     <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -112,73 +112,76 @@ export default function LoginPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="password">Password</Label>
-                  <div className="relative">
+                  <Label htmlFor="password" className="text-gray-700">
+                    Password
+                  </Label>
+                  <div className="relative mt-1">
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       placeholder="Enter your password"
                       {...register('password')}
-                      className={errors.password ? 'border-red-500' : ''}
+                      className={`pr-10 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 ${errors.password ? 'border-red-500' : ''}`}
                     />
                     <button
                       type="button"
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
                       onClick={() => setShowPassword(!showPassword)}
                     >
-                      {showPassword ? 'Hide' : 'Show'}
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                   {errors.password && (
                     <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
                   )}
                 </div>
-              </div>
 
-              {errors.root && (
-                <div className="rounded-md bg-red-50 p-4">
-                  <p className="text-sm text-red-800">{errors.root.message}</p>
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  'Sign in'
+                {errors.root && (
+                  <div className="rounded-md bg-red-50 p-4 border border-red-200">
+                    <p className="text-sm text-red-800">{errors.root.message}</p>
+                  </div>
                 )}
-              </Button>
-            </form>
 
-            <div className="mt-6">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">New to Atlas?</span>
-                </div>
-              </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Signing in...
+                    </>
+                  ) : (
+                    'Sign in'
+                  )}
+                </Button>
+              </form>
 
-              <div className="mt-6">
-                <Link href="/register">
-                  <Button variant="outline" className="w-full">
-                    Create an Account
-                  </Button>
-                </Link>
+              {/* OAuth Section - below email/password */}
+              <OAuthDivider text="or" />
+
+              <OAuthButtons
+                mode="login"
+                onError={(error) => setError('root', { message: error })}
+              />
+
+              <div className="text-center pt-4 border-t border-gray-200">
+                <p className="text-sm text-gray-600">
+                  New to Atlas?{' '}
+                  <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
+                    Create an account
+                  </Link>
+                </p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </div>
     </>
   )
 }

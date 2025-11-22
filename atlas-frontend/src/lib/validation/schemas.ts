@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Validation schemas for Atlas Pharma forms
+ * Validation schemas for Atlas PharmaTech forms
  * Using Zod for runtime type checking and validation
  */
 

@@ -213,43 +213,6 @@ export default function AiImportPage() {
           </div>
         </div>
 
-        {/* Quota Card */}
-        {quota && (
-          <Card className="border-2 border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-blue-500/5">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Zap className="h-5 w-5 text-yellow-500" />
-                AI Usage Quota
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Monthly Imports</div>
-                  <div className="text-2xl font-bold">{quota.monthly_imports_used} / {quota.monthly_import_limit}</div>
-                  <Progress
-                    value={(quota.monthly_imports_used / quota.monthly_import_limit) * 100}
-                    className="mt-2 h-2"
-                  />
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">AI Cost Used</div>
-                  <div className="text-2xl font-bold">${quota.monthly_cost_used_usd} / ${quota.monthly_cost_limit_usd}</div>
-                  <Progress
-                    value={(parseFloat(quota.monthly_cost_used_usd) / parseFloat(quota.monthly_cost_limit_usd)) * 100}
-                    className="mt-2 h-2"
-                  />
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Remaining</div>
-                  <div className="text-2xl font-bold text-green-500">{quota.imports_remaining} imports</div>
-                  <div className="text-sm text-muted-foreground mt-1">${quota.cost_remaining_usd} left</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Upload Zone */}
         {!currentSession && (
           <Card>

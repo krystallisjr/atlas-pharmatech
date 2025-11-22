@@ -45,11 +45,12 @@ export default function MappingsPage({ params }: { params: Promise<{ id: string 
       ]);
 
       setConnection(connData);
-      setMappingStatus(statusData);
+      setMappingStatus(statusData || null);
       setSuggestions(suggestionsData);
       setApprovedMappings(mappingsData);
     } catch (error: any) {
       console.error('Failed to load mappings:', error);
+      setMappingStatus(null);
       setSuggestions([]);
       setApprovedMappings([]);
       router.push('/dashboard/erp');
@@ -77,7 +78,7 @@ export default function MappingsPage({ params }: { params: Promise<{ id: string 
 
   const handleApprove = async (suggestionId: string) => {
     try {
-      const mapping = await ErpService.reviewMappingSuggestion(id, suggestionId, { action: 'approve' });
+      const mapping = await ErpService.reviewMappingSuggestion(id, suggestionId, { approved: true });
 
       // Remove from suggestions and add to approved
       setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
@@ -95,7 +96,7 @@ export default function MappingsPage({ params }: { params: Promise<{ id: string 
 
   const handleReject = async (suggestionId: string) => {
     try {
-      await ErpService.reviewMappingSuggestion(id, suggestionId, { action: 'reject' });
+      await ErpService.reviewMappingSuggestion(id, suggestionId, { approved: false });
 
       // Remove from suggestions
       setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
@@ -113,7 +114,7 @@ export default function MappingsPage({ params }: { params: Promise<{ id: string 
     }
 
     const approvePromises = Array.from(selectedSuggestions).map(id =>
-      ErpService.reviewMappingSuggestion(id, id, { action: 'approve' })
+      ErpService.reviewMappingSuggestion(id, id, { approved: true })
     );
 
     try {
@@ -138,7 +139,7 @@ export default function MappingsPage({ params }: { params: Promise<{ id: string 
     }
 
     const rejectPromises = Array.from(selectedSuggestions).map(id =>
-      ErpService.reviewMappingSuggestion(id, id, { action: 'reject' })
+      ErpService.reviewMappingSuggestion(id, id, { approved: false })
     );
 
     try {
@@ -257,12 +258,18 @@ export default function MappingsPage({ params }: { params: Promise<{ id: string 
       </div>
 
       {/* Mapping Status */}
-      <MappingStatusIndicator
-        mapped={mappingStatus.mapped_count}
-        total={mappingStatus.total_atlas_items}
-        percentage={mappingStatus.mapping_percentage}
-        suggested={mappingStatus.suggested_count}
-      />
+      {mappingStatus ? (
+        <MappingStatusIndicator
+          mapped={mappingStatus.mapped_count}
+          total={mappingStatus.total_atlas_items}
+          percentage={mappingStatus.mapping_percentage}
+          suggested={mappingStatus.suggested_count}
+        />
+      ) : (
+        <Card className="p-4 text-center text-gray-500">
+          Loading mapping status...
+        </Card>
+      )}
 
       {/* Suggestions Section */}
       {suggestions.length > 0 && (

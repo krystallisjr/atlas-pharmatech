@@ -1,8 +1,11 @@
+pub mod admin;
+pub mod admin_security;
 pub mod auth;
 pub mod pharmaceutical;
 pub mod inventory;
 pub mod marketplace;
 pub mod openfda;
+pub mod ema;
 pub mod inquiry_messages;
 pub mod ai_import;
 pub mod nl_query;
@@ -12,12 +15,16 @@ pub mod mfa;
 pub mod regulatory_documents;
 pub mod erp_integration;
 pub mod erp_ai_integration;
+pub mod oauth;
 
+pub use admin::*;
+pub use admin_security::*;
 pub use auth::*;
 pub use pharmaceutical::*;
 pub use inventory::*;
 pub use marketplace::*;
 pub use openfda::*;
+pub use ema::*;
 pub use inquiry_messages::*;
 pub use ai_import::*;
 pub use nl_query::*;

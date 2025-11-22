@@ -23,6 +23,9 @@ interface AuthContextType {
   setMfaRequired: (email: string, userId: string) => void;
   clearMfaState: () => void;
   completeMfaLogin: (user: User, token: string) => void;
+  // 👑 Admin role checks
+  isAdmin: () => boolean;
+  isSuperadmin: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -170,8 +173,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  // 👑 Admin role helper methods
+  const isAdmin = (): boolean => {
+    return user?.role === 'admin' || user?.role === 'superadmin';
+  };
+
+  const isSuperadmin = (): boolean => {
+    return user?.role === 'superadmin';
+  };
+
   const isAuthenticated = !!token && !!user;
-  console.log('🔐 AuthContext state update:', { isAuthenticated, hasUser: !!user, hasToken: !!token, isLoading, mfaRequired });
+  console.log('🔐 AuthContext state update:', { isAuthenticated, hasUser: !!user, hasToken: !!token, isLoading, mfaRequired, role: user?.role });
 
   const value: AuthContextType = {
     user,
@@ -191,6 +203,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setMfaRequired,
     clearMfaState,
     completeMfaLogin,
+    // 👑 Admin role checks
+    isAdmin,
+    isSuperadmin,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

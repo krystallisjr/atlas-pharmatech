@@ -91,13 +91,15 @@ class ApiClient {
   private async request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     url: string,
-    data?: any
+    data?: any,
+    params?: Record<string, any>
   ): Promise<T> {
     try {
       const response = await this.client.request<T>({
         method,
         url,
         data,
+        params,
       });
       return response.data;
     } catch (error) {
@@ -109,8 +111,8 @@ class ApiClient {
   }
 
   // HTTP methods
-  async get<T>(url: string): Promise<T> {
-    return this.request<T>('GET', url);
+  async get<T>(url: string, config?: { params?: Record<string, any> }): Promise<T> {
+    return this.request<T>('GET', url, undefined, config?.params);
   }
 
   async post<T>(url: string, data?: any): Promise<T> {
@@ -125,23 +127,32 @@ class ApiClient {
     return this.request<T>('DELETE', url);
   }
 
-  // File upload method
+  // File upload method - uses fresh axios instance to avoid default Content-Type header
   async upload<T>(url: string, file: File, onProgress?: (progress: number) => void): Promise<T> {
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const response = await this.client.post<T>(url, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        onUploadProgress: (progressEvent) => {
-          if (onProgress && progressEvent.total) {
-            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            onProgress(progress);
-          }
-        },
-      });
+      // Use axios directly (not the configured instance) to avoid default Content-Type header.
+      // This ensures axios auto-detects FormData and sets multipart/form-data with boundary.
+      const token = typeof window !== 'undefined' ? localStorage.getItem('atlas_token') : null;
+
+      const response = await axios.post<T>(
+        `${process.env.NEXT_PUBLIC_API_URL || 'https://localhost:8443'}${url}`,
+        formData,
+        {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            // Do NOT set Content-Type - let axios auto-detect from FormData
+          },
+          onUploadProgress: (progressEvent) => {
+            if (onProgress && progressEvent.total) {
+              const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              onProgress(progress);
+            }
+          },
+        }
+      );
       return response.data;
     } catch (error) {
       if (error instanceof Error) {

@@ -50,13 +50,16 @@ pub struct GeneratedDocument {
     pub id: Uuid,
     pub document_type: String,
     pub document_number: String,
+    pub title: String,
     pub content: serde_json::Value,
     pub content_hash: String,
+    #[serde(rename = "generated_signature")]
     pub signature: String,
     pub public_key: String,
     pub rag_context: Vec<RagContextEntry>,
     pub status: String,
-    pub generated_at: chrono::DateTime<chrono::Utc>,
+    pub generated_by: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// RAG context entry (knowledge base chunks used)
@@ -205,10 +208,14 @@ impl RegulatoryDocumentGenerator {
             document_id
         );
 
+        // Generate title from document type and number
+        let title = format!("{} - {}", request.document_type.as_str(), document_number);
+
         Ok(GeneratedDocument {
             id: document_id,
             document_type: request.document_type.as_str().to_string(),
             document_number,
+            title,
             content,
             content_hash: content_hash_hex,
             signature,
@@ -223,7 +230,8 @@ impl RegulatoryDocumentGenerator {
                 })
                 .collect(),
             status: "draft".to_string(),
-            generated_at: chrono::Utc::now(),
+            generated_by: user_id.to_string(),
+            created_at: chrono::Utc::now(),
         })
     }
 

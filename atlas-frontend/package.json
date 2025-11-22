@@ -1,7 +1,7 @@
 {
   "name": "atlas-pharma-frontend",
   "version": "1.0.0",
-  "description": "Atlas Pharmaceutical Marketplace Frontend",
+  "description": "Atlas PharmaTechTech Frontend",
   "private": true,
   "scripts": {
     "dev": "next dev",

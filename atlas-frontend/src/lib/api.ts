@@ -126,7 +126,7 @@ export const regulatoryApi = {
 
   // List all regulatory documents with filtering
   list: (params?: ListDocumentsParams) =>
-    apiClient.get<DocumentListResponse>('/api/regulatory/documents', params),
+    apiClient.get<DocumentListResponse>('/api/regulatory/documents', { params }),
 
   // Get specific document by ID
   getById: (id: string) =>

@@ -93,17 +93,64 @@ pub async fn delete_inventory(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+/// Search marketplace with optional authentication
+///
+/// 🔒 SECURITY: Optional authentication with rate limiting
+///
+/// **Unauthenticated Access:**
+/// - Limited to 10 results per query
+/// - Rate limited to 20 requests per 15 minutes
+/// - Audited with source IP tracking
+///
+/// **Authenticated Access:**
+/// - Full results (up to limit specified)
+/// - Standard API rate limits apply
+/// - Audited with user ID tracking
+///
 pub async fn search_marketplace(
     State(config): State<AppConfig>,
-    Query(request): Query<SearchInventoryRequest>,
+    claims: Option<Extension<Claims>>,  // 🔒 SECURITY: Optional auth - Extract if present
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    Query(mut request): Query<SearchInventoryRequest>,
 ) -> Result<Json<Vec<crate::models::inventory::InventoryResponse>>> {
     let inventory_service = InventoryService::new(
         crate::repositories::InventoryRepository::new(config.database_pool.clone()),
         crate::repositories::PharmaceuticalRepository::new(config.database_pool.clone()),
     );
 
-    let results = inventory_service.search_marketplace(request).await?;
-    Ok(Json(results))
+    // 🔒 SECURITY: Apply different limits based on authentication status
+    match claims {
+        Some(claims) => {
+            // ✅ Authenticated user - full access
+            // 📋 AUDIT: Log authenticated marketplace search
+            tracing::info!(
+                "Authenticated marketplace search by user: {} (IP: {})",
+                claims.user_id,
+                crate::utils::log_sanitizer::sanitize_ip_for_log(&addr.ip())
+            );
+
+            let results = inventory_service.search_marketplace(request).await?;
+            Ok(Json(results))
+        }
+        None => {
+            // ⚠️  Unauthenticated user - limited access
+            // 🔒 SECURITY: Limit results to prevent data harvesting
+            const UNAUTHENTICATED_LIMIT: i64 = 10;
+            if request.limit.is_none() || request.limit.unwrap() > UNAUTHENTICATED_LIMIT {
+                request.limit = Some(UNAUTHENTICATED_LIMIT);
+            }
+
+            // 📋 AUDIT: Log anonymous marketplace search with IP
+            tracing::warn!(
+                "⚠️  Anonymous marketplace search from IP: {} (limited to {} results)",
+                crate::utils::log_sanitizer::sanitize_ip_for_log(&addr.ip()),
+                UNAUTHENTICATED_LIMIT
+            );
+
+            let results = inventory_service.search_marketplace(request).await?;
+            Ok(Json(results))
+        }
+    }
 }
 
 pub async fn get_expiry_alerts(

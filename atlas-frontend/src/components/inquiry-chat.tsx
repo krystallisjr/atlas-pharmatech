@@ -214,16 +214,6 @@ export function InquiryChat({ inquiryId, buyerCompany, sellerCompany, isSeller =
               Between {buyerCompany} (Buyer) and {sellerCompany} (Seller)
             </div>
           </div>
-          {isSeller && quota && (
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-purple-50 border-purple-200">
-                <Zap className="h-3 w-3 mr-1 text-purple-600" />
-                <span className="text-xs">
-                  AI Assists: {quota.assists_remaining}/{quota.assist_limit}
-                </span>
-              </Badge>
-            </div>
-          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

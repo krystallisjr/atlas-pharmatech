@@ -1,9 +1,21 @@
+pub mod admin;
 pub mod auth;
 pub mod error_handling;
 pub mod rate_limiter;
 pub mod ip_rate_limiter;
+pub mod security_headers;
+pub mod csrf_protection;
+pub mod request_id;
+pub mod content_type_validation;
+pub mod metrics;
 
+pub use admin::*;
 pub use auth::*;
 pub use error_handling::*;
 pub use rate_limiter::*;
 pub use ip_rate_limiter::*;
+pub use security_headers::*;
+pub use csrf_protection::*;
+pub use request_id::*;
+pub use content_type_validation::*;
+pub use metrics::*;

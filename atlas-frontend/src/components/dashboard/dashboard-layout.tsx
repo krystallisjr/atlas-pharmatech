@@ -86,7 +86,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <SheetContent side="left" className="p-0 w-64">
           <div className="flex h-full flex-col">
             <div className="flex h-16 items-center px-6 border-b">
-              <h1 className="text-xl font-bold text-gray-900">Atlas Pharma</h1>
+              <h1 className="text-xl font-bold text-gray-900">Atlas PharmaTech</h1>
             </div>
             <nav className="flex-1 space-y-1 px-3 py-4">
               {navigation.map((item) => {
@@ -128,7 +128,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200 pt-5 pb-4 overflow-y-auto">
           <div className="flex items-center flex-shrink-0 px-6">
-            <h1 className="text-xl font-bold text-gray-900">Atlas Pharma</h1>
+            <h1 className="text-xl font-bold text-gray-900">Atlas PharmaTech</h1>
           </div>
           <nav className="mt-8 flex-1 px-3 space-y-1">
             {navigation.map((item) => {

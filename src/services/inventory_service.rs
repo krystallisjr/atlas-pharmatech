@@ -113,6 +113,7 @@ impl InventoryService {
             address: None,
             license_number: None,
             is_verified: false,
+            role: crate::models::user::UserRole::User,
             created_at: chrono::Utc::now(),
         };
 

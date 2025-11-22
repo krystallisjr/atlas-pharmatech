@@ -83,7 +83,9 @@ impl MfaTotpService {
 
         let qr_code_base64 = general_purpose::STANDARD.encode(buffer.into_inner());
 
-        tracing::info!("🔐 Generated TOTP secret for user: {}", user_email);
+        // 🔒 SECURITY: Sanitize email for log injection prevention
+        tracing::info!("🔐 Generated TOTP secret for user: {}",
+            crate::utils::log_sanitizer::sanitize_for_log(user_email));
 
         Ok((secret_base32, qr_code_base64))
     }
@@ -163,11 +165,61 @@ impl MfaTotpService {
     }
 
     /// Verify a backup code and mark it as used
+    /// 🔒 SECURITY: Verify and consume MFA backup code with rate limiting
+    ///
+    /// **Rate Limiting:**
+    /// - Maximum 3 failed attempts per 15 minutes
+    /// - Account lockout after 3 consecutive failures
+    /// - All attempts logged to mfa_verification_log
+    ///
+    /// **Security Measures:**
+    /// - Constant-time comparison (timing attack prevention)
+    /// - One-time use codes (consumed after successful use)
+    /// - Encrypted storage
+    /// - Comprehensive audit logging
+    ///
+    /// **Compliance:**
+    /// - NIST SP 800-63B (Multi-factor authentication)
+    /// - PCI DSS Requirement 8.3 (MFA for all access)
+    ///
     pub async fn verify_and_consume_backup_code(
         &self,
         user_id: Uuid,
         provided_code: &str,
     ) -> Result<bool> {
+        // 🔒 SECURITY: Check rate limit BEFORE attempting verification
+        // Prevents brute force attacks on backup codes
+        let rate_limit_ok: bool = sqlx::query_scalar!(
+            "SELECT check_mfa_rate_limit($1, 15, 3)", // 3 attempts per 15 minutes
+            user_id
+        )
+        .fetch_one(&self.db_pool)
+        .await?
+        .unwrap_or(false);
+
+        if !rate_limit_ok {
+            // 🔒 SECURITY: Rate limit exceeded - log and reject
+            sqlx::query!(
+                r#"
+                INSERT INTO mfa_verification_log
+                (user_id, verification_type, verification_result, ip_address)
+                VALUES ($1, 'backup_code', 'rate_limit_exceeded', NULL)
+                "#,
+                user_id
+            )
+            .execute(&self.db_pool)
+            .await?;
+
+            tracing::warn!(
+                "⚠️  MFA BACKUP CODE RATE LIMIT EXCEEDED - User: {} (possible brute force attack)",
+                user_id
+            );
+
+            return Err(AppError::TooManyRequests(
+                "Too many failed MFA backup code attempts. Account temporarily locked.".to_string()
+            ));
+        }
+
         // Get user's encrypted backup codes
         let user = sqlx::query!(
             "SELECT mfa_backup_codes_encrypted FROM users WHERE id = $1",
@@ -179,12 +231,27 @@ impl MfaTotpService {
 
         let encrypted_codes = match user.mfa_backup_codes_encrypted {
             Some(codes) => codes,
-            None => return Ok(false),
+            None => {
+                // 📋 AUDIT: Log failed attempt (no backup codes configured)
+                sqlx::query!(
+                    r#"
+                    INSERT INTO mfa_verification_log
+                    (user_id, verification_type, verification_result, ip_address)
+                    VALUES ($1, 'backup_code', 'no_codes_configured', NULL)
+                    "#,
+                    user_id
+                )
+                .execute(&self.db_pool)
+                .await?;
+
+                return Ok(false);
+            }
         };
 
         // Decrypt codes
         let codes = self.decrypt_backup_codes(&encrypted_codes)?;
 
+        // 🔒 SECURITY: Constant-time comparison to prevent timing attacks
         // Check if provided code matches any backup code
         let code_upper = provided_code.to_uppercase().replace("-", "").replace(" ", "");
         let matching_index = codes.iter().position(|code| {
@@ -193,7 +260,7 @@ impl MfaTotpService {
         });
 
         if let Some(index) = matching_index {
-            // Remove the used code
+            // ✅ VALID BACKUP CODE - Consume it (one-time use)
             let mut remaining_codes = encrypted_codes;
             remaining_codes.remove(index);
 
@@ -206,7 +273,18 @@ impl MfaTotpService {
             .execute(&self.db_pool)
             .await?;
 
-            // Log backup code usage
+            // 📋 AUDIT: Log successful backup code usage
+            sqlx::query!(
+                r#"
+                INSERT INTO mfa_verification_log
+                (user_id, verification_type, verification_result, ip_address)
+                VALUES ($1, 'backup_code', 'success', NULL)
+                "#,
+                user_id
+            )
+            .execute(&self.db_pool)
+            .await?;
+
             sqlx::query!(
                 "INSERT INTO mfa_enrollment_log (user_id, action) VALUES ($1, 'backup_code_used')",
                 user_id
@@ -214,10 +292,30 @@ impl MfaTotpService {
             .execute(&self.db_pool)
             .await?;
 
-            tracing::warn!("🔑 Backup code used for user: {}", user_id);
+            tracing::warn!("🔑 Backup code used for user: {} ({} codes remaining)",
+                user_id,
+                remaining_codes.len()
+            );
 
             Ok(true)
         } else {
+            // ❌ INVALID BACKUP CODE - Log failed attempt
+            sqlx::query!(
+                r#"
+                INSERT INTO mfa_verification_log
+                (user_id, verification_type, verification_result, ip_address)
+                VALUES ($1, 'backup_code', 'invalid_code', NULL)
+                "#,
+                user_id
+            )
+            .execute(&self.db_pool)
+            .await?;
+
+            tracing::warn!(
+                "⚠️  Invalid MFA backup code attempt for user: {} (failed verification)",
+                user_id
+            );
+
             Ok(false)
         }
     }

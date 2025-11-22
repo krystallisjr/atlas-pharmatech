@@ -191,8 +191,8 @@ export default function InventoryPage() {
     try {
       const updateData: UpdateInventoryRequest = {
         quantity: formData.quantity,
-        unit_price: formData.unit_price,
-        storage_location: formData.storage_location,
+        unit_price: formData.unit_price || undefined,
+        storage_location: formData.storage_location || undefined,
       };
 
       const updatedItem = await InventoryService.updateInventory(editingItem.id, updateData);

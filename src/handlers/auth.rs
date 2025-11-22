@@ -69,6 +69,9 @@ pub async fn register(
         cookie.to_string().parse().unwrap(),
     );
 
+    // 🔒 SECURITY: Add CSRF token for protection against cross-site request forgery
+    crate::middleware::csrf_protection::add_csrf_token_to_response(&mut response);
+
     Ok(response)
 }
 
@@ -119,7 +122,9 @@ pub async fn login(
 
                 if !is_trusted {
                     // MFA required - return special response WITHOUT setting auth cookie
-                    tracing::info!("🔐 MFA verification required for user: {}", email);
+                    // 🔒 SECURITY: Sanitize email for log injection prevention
+                    tracing::info!("🔐 MFA verification required for user: {}",
+                        crate::utils::log_sanitizer::sanitize_for_log(&email));
 
                     // Return MFA required response
                     return Ok(Json(serde_json::json!({
@@ -130,7 +135,9 @@ pub async fn login(
                 }
 
                 // Trusted device - proceed with normal login
-                tracing::info!("✅ Trusted device detected for user: {}", email);
+                // 🔒 SECURITY: Sanitize email for log injection prevention
+                tracing::info!("✅ Trusted device detected for user: {}",
+                    crate::utils::log_sanitizer::sanitize_for_log(&email));
             }
 
             // 📋 AUDIT: Log successful login
@@ -159,6 +166,9 @@ pub async fn login(
                 header::SET_COOKIE,
                 cookie.to_string().parse().unwrap(),
             );
+
+            // 🔒 SECURITY: Add CSRF token for protection against cross-site request forgery
+            crate::middleware::csrf_protection::add_csrf_token_to_response(&mut response);
 
             Ok(response)
         }
@@ -238,6 +248,7 @@ pub async fn refresh_token(
         &user.email,
         &user.company_name,
         user.is_verified,
+        user.role,
     )?;
 
     // Check if TLS is enabled (production mode)
@@ -286,6 +297,151 @@ pub async fn logout(
         header::SET_COOKIE,
         cookie.to_string().parse().unwrap(),
     );
+
+    Ok(response)
+}
+/// Change user password with session invalidation
+///
+/// 🔒 SECURITY: Password change invalidates ALL existing sessions
+///
+/// **Security Features:**
+/// 1. Requires current password verification
+/// 2. Validates new password strength
+/// 3. Invalidates ALL tokens (logout from all devices)
+/// 4. Issues new token for current session
+/// 5. Comprehensive audit logging
+///
+/// **Compliance:**
+/// - NIST SP 800-63B (Password requirements)
+/// - PCI DSS Requirement 8.2.4 (Password change)
+/// - HIPAA §164.308(a)(5) (Access management)
+///
+pub async fn change_password(
+    State(config): State<AppConfig>,
+    Extension(claims): Extension<Claims>,
+    Extension(blacklist): Extension<std::sync::Arc<crate::services::TokenBlacklistService>>,
+    Extension(audit): Extension<std::sync::Arc<crate::services::ComprehensiveAuditService>>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    Json(request): Json<serde_json::Value>,
+) -> Result<Response> {
+    // Extract passwords from request
+    let current_password = request.get("current_password")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AppError::BadRequest("current_password required".to_string()))?;
+
+    let new_password = request.get("new_password")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AppError::BadRequest("new_password required".to_string()))?;
+
+    // 🔒 SECURITY: Validate new password strength
+    if new_password.len() < 8 {
+        return Err(AppError::BadRequest("Password must be at least 8 characters".to_string()));
+    }
+
+    // Get user from database
+    let user_repo = crate::repositories::UserRepository::new(
+        config.database_pool.clone(),
+        &config.encryption_key
+    )?;
+
+    let user = user_repo
+        .find_by_id(claims.user_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+    // Verify current password
+    let is_valid = bcrypt::verify(current_password, &user.password_hash)?;
+    if !is_valid {
+        // 📋 AUDIT: Log failed password change attempt
+        let _ = audit.log(crate::services::comprehensive_audit_service::AuditLogEntry {
+            event_type: "password_change_failed".to_string(),
+            event_category: crate::services::comprehensive_audit_service::EventCategory::Security,
+            severity: crate::services::comprehensive_audit_service::Severity::Warning,
+            actor_user_id: Some(claims.user_id),
+            actor_type: "user".to_string(),
+            resource_type: Some("user_password".to_string()),
+            action: "change_password".to_string(),
+            action_result: crate::services::comprehensive_audit_service::ActionResult::Failure,
+            event_data: serde_json::json!({
+                "reason": "invalid_current_password"
+            }),
+            ..Default::default()
+        }).await;
+
+        return Err(AppError::Unauthorized);
+    }
+
+    // 🔒 SECURITY: Hash new password with bcrypt
+    let new_password_hash = bcrypt::hash(new_password, bcrypt::DEFAULT_COST)?;
+
+    // Update password in database
+    sqlx::query!(
+        "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2",
+        new_password_hash,
+        claims.user_id
+    )
+    .execute(&config.database_pool)
+    .await?;
+
+    // 🔒 SECURITY: Invalidate ALL tokens for this user (logout from all devices)
+    // This prevents stolen sessions from remaining valid after password change
+    blacklist.revoke_user_tokens(
+        claims.user_id,
+        "password_change".to_string(),
+    );
+
+    tracing::info!(
+        "✅ Password changed for user: {} (all sessions invalidated)",
+        claims.user_id
+    );
+
+    // 📋 AUDIT: Log successful password change
+    let _ = audit.log(crate::services::comprehensive_audit_service::AuditLogEntry {
+        event_type: "password_change_success".to_string(),
+        event_category: crate::services::comprehensive_audit_service::EventCategory::Security,
+        severity: crate::services::comprehensive_audit_service::Severity::Info,
+        actor_user_id: Some(claims.user_id),
+        actor_type: "user".to_string(),
+        resource_type: Some("user_password".to_string()),
+        action: "change_password".to_string(),
+        action_result: crate::services::comprehensive_audit_service::ActionResult::Success,
+        event_data: serde_json::json!({
+            "all_sessions_invalidated": true
+        }),
+        ..Default::default()
+    }).await;
+
+    // Generate new token for current session
+    let auth_service = AuthService::new(user_repo, &config.jwt_secret);
+    let new_token = auth_service.generate_token(
+        user.id,
+        &user.email,
+        &user.company_name,
+        user.is_verified,
+        user.role.clone(),
+    )?;
+
+    // Set new auth cookie
+    let is_production = std::env::var("TLS_ENABLED")
+        .unwrap_or_else(|_| "false".to_string())
+        .parse()
+        .unwrap_or(false);
+
+    let cookie = create_auth_cookie(new_token.clone(), is_production);
+
+    let response_body = serde_json::json!({
+        "message": "Password changed successfully. All other sessions have been logged out.",
+        "token": new_token,
+    });
+
+    let mut response = Json(response_body).into_response();
+    response.headers_mut().insert(
+        header::SET_COOKIE,
+        cookie.to_string().parse().unwrap(),
+    );
+
+    // 🔒 SECURITY: Add new CSRF token
+    crate::middleware::csrf_protection::add_csrf_token_to_response(&mut response);
 
     Ok(response)
 }

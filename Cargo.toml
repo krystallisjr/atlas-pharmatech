@@ -38,6 +38,7 @@ qrcode = "0.14"  # QR code generation for MFA
 image = "0.25"  # QR code image encoding
 sodiumoxide = "0.2"  # Libsodium Ed25519 signatures for regulatory compliance
 hex = "0.4"  # Hex encoding for signatures and keys
+subtle = "2.5"  # Constant-time comparison for CSRF tokens
 
 # Time/UUID
 chrono = { version = "0.4", features = ["serde"] }
@@ -47,6 +48,7 @@ time = { version = "0.3", features = ["serde"] }
 # Validation
 validator = { version = "0.18", features = ["derive"] }
 regex = "1.10"
+once_cell = "1.19"  # Lazy static initialization for log sanitization
 
 # Environment/Dotenv
 dotenvy = "0.15"
@@ -60,12 +62,18 @@ thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Metrics & Observability
+prometheus = "0.13"
+lazy_static = "1.4"
+
 # HTTP client (for external APIs if needed)
 reqwest = { version = "0.11", features = ["json", "cookies"] }
 
 # OAuth & ERP Integration
 hmac = "0.12"  # HMAC for OAuth 1.0 and webhook verification
 percent-encoding = "2.3"  # URL encoding for OAuth parameters
+openidconnect = "3.4"  # OIDC/OAuth 2.0 for social login (Google, GitHub, Microsoft)
+url = "2.5"  # URL parsing for OAuth redirects
 
 # File parsing
 csv = "1.3"

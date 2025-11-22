@@ -289,10 +289,12 @@ export default function DocumentDetailPage() {
                       </div>
                     </>
                   )}
-                  <div>
-                    <span className="text-gray-600">Last Updated:</span>
-                    <span className="ml-2">{new Date(document.updated_at).toLocaleString()}</span>
-                  </div>
+                  {document.updated_at && (
+                    <div>
+                      <span className="text-gray-600">Last Updated:</span>
+                      <span className="ml-2">{new Date(document.updated_at).toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
