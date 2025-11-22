@@ -26,7 +26,7 @@ export class AlertService {
   }
 
   static async markAllRead(): Promise<void> {
-    await apiClient.post('/api/alerts/notifications/mark-all-read');
+    await apiClient.post('/api/alerts/notifications/mark-all-read', {});
   }
 
   static async dismissNotification(notificationId: string): Promise<void> {

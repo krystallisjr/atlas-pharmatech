@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, Check, X, AlertCircle, Clock, Package } from 'lucide-react';
+import { Bell, Check, X, AlertCircle, Clock, Package, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -97,6 +97,7 @@ export function NotificationBell() {
   const getIcon = (type: string) => {
     if (type.includes('expiry')) return <Clock className="h-4 w-4" />;
     if (type === 'low_stock') return <Package className="h-4 w-4" />;
+    if (type === 'new_inquiry' || type === 'inquiry_message') return <MessageSquare className="h-4 w-4" />;
     return <AlertCircle className="h-4 w-4" />;
   };
 

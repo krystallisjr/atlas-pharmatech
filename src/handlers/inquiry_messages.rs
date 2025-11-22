@@ -17,6 +17,7 @@ pub async fn create_message(
     Extension(claims): Extension<Claims>,
     Json(request): Json<CreateInquiryMessageRequest>,
 ) -> Result<Json<InquiryMessageResponse>> {
+    let inquiry_id = request.inquiry_id;
     let repo = InquiryMessageRepository::new(config.database_pool.clone());
 
     let message = repo.create(claims.user_id, request).await?;
@@ -32,6 +33,40 @@ pub async fn create_message(
     )
     .fetch_one(&config.database_pool)
     .await?;
+
+    // Get the other party in the inquiry to notify them
+    let inquiry_info = sqlx::query!(
+        r#"
+        SELECT i.buyer_id, inv.user_id as seller_id
+        FROM inquiries i
+        JOIN inventory inv ON i.inventory_id = inv.id
+        WHERE i.id = $1
+        "#,
+        inquiry_id
+    )
+    .fetch_one(&config.database_pool)
+    .await?;
+
+    // Determine recipient (the other party)
+    let recipient_id = if claims.user_id == inquiry_info.buyer_id {
+        inquiry_info.seller_id
+    } else {
+        inquiry_info.buyer_id
+    };
+
+    // Create notification for recipient
+    let notification_service = crate::services::NotificationService::new(config.database_pool.clone());
+    let alert_payload = crate::models::alerts::AlertPayload::new_inquiry_message(
+        recipient_id,
+        claims.user_id,
+        &sender.company_name,
+        inquiry_id,
+    );
+
+    // Fire and forget - don't fail message send if notification fails
+    if let Err(e) = notification_service.create_alert(alert_payload).await {
+        tracing::warn!("Failed to create message notification: {}", e);
+    }
 
     let response = InquiryMessageResponse::new(message, sender.company_name);
 

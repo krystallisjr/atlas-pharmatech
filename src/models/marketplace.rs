@@ -25,7 +25,7 @@ pub struct Inquiry {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate)]
 pub struct CreateInquiryRequest {
     pub inventory_id: Uuid,
     #[validate(range(min = 1, message = "Quantity must be at least 1"))]

@@ -27,8 +27,28 @@ impl MarketplaceRepository {
         .fetch_one(&self.pool)
         .await?;
 
+        let inquiry_id: Uuid = row.try_get("id")?;
+
+        // Also insert the initial message into inquiry_messages table
+        // so it shows up in the message thread for both buyer and seller
+        if let Some(ref message) = request.message {
+            if !message.trim().is_empty() {
+                query(
+                    r#"
+                    INSERT INTO inquiry_messages (inquiry_id, sender_id, message)
+                    VALUES ($1, $2, $3)
+                    "#
+                )
+                .bind(inquiry_id)
+                .bind(buyer_id)
+                .bind(message.trim())
+                .execute(&self.pool)
+                .await?;
+            }
+        }
+
         Ok(Inquiry {
-            id: row.try_get("id")?,
+            id: inquiry_id,
             inventory_id: row.try_get("inventory_id")?,
             buyer_id: row.try_get("buyer_id")?,
             quantity_requested: row.try_get("quantity_requested")?,

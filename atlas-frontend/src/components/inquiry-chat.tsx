@@ -246,7 +246,15 @@ export function InquiryChat({ inquiryId, buyerCompany, sellerCompany, isSeller =
                         {format(new Date(message.created_at), 'MMM d, h:mm a')}
                       </span>
                     </div>
-                    <p className="text-sm whitespace-pre-wrap break-words">{message.message}</p>
+                    <div className={`text-sm prose prose-sm max-w-none ${
+                      isMyMessage(message)
+                        ? 'prose-invert prose-p:my-1 prose-strong:text-white prose-ul:my-1 prose-li:my-0.5'
+                        : 'prose-p:my-1 prose-strong:text-gray-900 prose-ul:my-1 prose-li:my-0.5'
+                    }`}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {message.message}
+                      </ReactMarkdown>
+                    </div>
                   </div>
                 </div>
               ))

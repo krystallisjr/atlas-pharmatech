@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ import { useAuthStore } from '@/lib/auth-store';
 
 export default function InquiriesPage() {
   const { user } = useAuthStore();
+  const searchParams = useSearchParams();
   const [buyerInquiries, setBuyerInquiries] = useState<Inquiry[]>([]);
   const [sellerInquiries, setSellerInquiries] = useState<Inquiry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,6 +53,19 @@ export default function InquiriesPage() {
   useEffect(() => {
     loadInquiries();
   }, []);
+
+  // Auto-open inquiry from URL query param (e.g., from notification click)
+  useEffect(() => {
+    const inquiryId = searchParams.get('id');
+    if (inquiryId && !isLoading && (buyerInquiries.length > 0 || sellerInquiries.length > 0)) {
+      // Find the inquiry in both buyer and seller lists
+      const inquiry = [...buyerInquiries, ...sellerInquiries].find(i => i.id === inquiryId);
+      if (inquiry) {
+        setSelectedInquiry(inquiry);
+        setIsDetailsDialogOpen(true);
+      }
+    }
+  }, [searchParams, isLoading, buyerInquiries, sellerInquiries]);
 
   const loadInquiries = async () => {
     try {

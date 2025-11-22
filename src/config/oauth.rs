@@ -323,6 +323,7 @@ pub struct ProviderInfo {
     pub name: String,
     pub display_name: String,
     pub auth_url: String,
+    pub enabled: bool,
 }
 
 impl OAuthConfig {
@@ -334,6 +335,7 @@ impl OAuthConfig {
                 name: p.as_str().to_string(),
                 display_name: p.display_name().to_string(),
                 auth_url: format!("/api/auth/oauth/{}", p.as_str()),
+                enabled: true,
             })
             .collect();
 

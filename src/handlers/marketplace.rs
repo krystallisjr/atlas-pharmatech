@@ -21,18 +21,57 @@ pub async fn create_inquiry(
     request.validate()
         .map_err(|e| crate::middleware::error_handling::AppError::Validation(e))?;
 
+    let inventory_repo = crate::repositories::InventoryRepository::new(config.database_pool.clone());
+    let user_repo = crate::repositories::UserRepository::new(config.database_pool.clone(), &config.encryption_key)?;
+
+    // Get inventory to find seller and product name
+    let inventory = inventory_repo
+        .find_by_id(request.inventory_id)
+        .await?
+        .ok_or(crate::middleware::error_handling::AppError::NotFound("Inventory not found".to_string()))?;
+
+    let seller_id = inventory.user_id;
+
+    // Get buyer company name
+    let buyer = user_repo.find_by_id(claims.user_id).await?
+        .ok_or(crate::middleware::error_handling::AppError::NotFound("User not found".to_string()))?;
+
+    // Get product name from pharmaceuticals
+    let pharma_repo = crate::repositories::PharmaceuticalRepository::new(config.database_pool.clone());
+    let pharma = pharma_repo.find_by_id(inventory.pharmaceutical_id).await?
+        .ok_or(crate::middleware::error_handling::AppError::NotFound("Product not found".to_string()))?;
+
     let marketplace_service = MarketplaceService::new(
         crate::repositories::MarketplaceRepository::new(config.database_pool.clone()),
-        crate::repositories::InventoryRepository::new(config.database_pool.clone()),
-        crate::repositories::UserRepository::new(config.database_pool.clone(), &config.encryption_key)?,
-        crate::repositories::PharmaceuticalRepository::new(config.database_pool.clone()),
+        inventory_repo,
+        user_repo,
+        pharma_repo,
         crate::services::InventoryService::new(
             crate::repositories::InventoryRepository::new(config.database_pool.clone()),
             crate::repositories::PharmaceuticalRepository::new(config.database_pool.clone()),
         ),
     );
 
-    let inquiry = marketplace_service.create_inquiry(request, claims.user_id).await?;
+    let inquiry = marketplace_service.create_inquiry(request.clone(), claims.user_id).await?;
+
+    // Create notification for seller
+    let notification_service = crate::services::NotificationService::new(config.database_pool.clone());
+    let product_name = format!("{} {}", pharma.brand_name, pharma.generic_name);
+    let alert_payload = crate::models::alerts::AlertPayload::new_inquiry(
+        seller_id,
+        claims.user_id,
+        &buyer.company_name,
+        &product_name,
+        request.quantity_requested,
+        inquiry.id,
+        request.inventory_id,
+    );
+
+    // Fire and forget - don't fail inquiry creation if notification fails
+    if let Err(e) = notification_service.create_alert(alert_payload).await {
+        tracing::warn!("Failed to create inquiry notification: {}", e);
+    }
+
     Ok(Json(inquiry))
 }
 

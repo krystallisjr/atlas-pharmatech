@@ -23,6 +23,8 @@ pub enum AlertType {
     LowStock,
     WatchlistMatch,
     PriceDrop,
+    NewInquiry,
+    InquiryMessage,
     System,
 }
 
@@ -34,6 +36,8 @@ impl AlertType {
             AlertType::LowStock => "low_stock",
             AlertType::WatchlistMatch => "watchlist_match",
             AlertType::PriceDrop => "price_drop",
+            AlertType::NewInquiry => "new_inquiry",
+            AlertType::InquiryMessage => "inquiry_message",
             AlertType::System => "system",
         }
     }
@@ -357,6 +361,60 @@ impl AlertPayload {
                 "match_count": match_count,
             })),
             action_url: Some("/dashboard/marketplace".to_string()),
+        }
+    }
+
+    /// Create a new inquiry notification for the seller
+    pub fn new_inquiry(
+        seller_id: Uuid,
+        buyer_id: Uuid,
+        buyer_company: &str,
+        product_name: &str,
+        quantity: i32,
+        inquiry_id: Uuid,
+        inventory_id: Uuid,
+    ) -> Self {
+        Self {
+            user_id: seller_id,
+            alert_type: AlertType::NewInquiry,
+            severity: AlertSeverity::Info,
+            title: format!("New inquiry from {}", buyer_company),
+            message: format!(
+                "{} has inquired about {} units of {}.",
+                buyer_company, quantity, product_name
+            ),
+            inventory_id: Some(inventory_id),
+            related_user_id: Some(buyer_id),
+            metadata: Some(serde_json::json!({
+                "inquiry_id": inquiry_id,
+                "buyer_company": buyer_company,
+                "product_name": product_name,
+                "quantity": quantity,
+            })),
+            action_url: Some(format!("/dashboard/inquiries?id={}", inquiry_id)),
+        }
+    }
+
+    /// Create a new message notification
+    pub fn new_inquiry_message(
+        recipient_id: Uuid,
+        sender_id: Uuid,
+        sender_company: &str,
+        inquiry_id: Uuid,
+    ) -> Self {
+        Self {
+            user_id: recipient_id,
+            alert_type: AlertType::InquiryMessage,
+            severity: AlertSeverity::Info,
+            title: format!("New message from {}", sender_company),
+            message: format!("{} sent you a message regarding an inquiry.", sender_company),
+            inventory_id: None,
+            related_user_id: Some(sender_id),
+            metadata: Some(serde_json::json!({
+                "inquiry_id": inquiry_id,
+                "sender_company": sender_company,
+            })),
+            action_url: Some(format!("/dashboard/inquiries?id={}", inquiry_id)),
         }
     }
 }
