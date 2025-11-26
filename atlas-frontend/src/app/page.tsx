@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,13 +17,14 @@ import {
 
 export default function HomePage() {
   const { isAuthenticated } = useAuth()
+  const router = useRouter()
 
-  if (isAuthenticated) {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard'
+  // Handle redirect AFTER hydration to avoid mismatch
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/dashboard')
     }
-    return null
-  }
+  }, [isAuthenticated, router])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -51,6 +54,7 @@ export default function HomePage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-16">
         <div className="text-center">
           <h1 className="text-4xl font-bold tracking-tight leading-tight text-gray-900 sm:text-5xl md:text-6xl">
+            <span className="block text-blue-600">AI-Powered</span>
             Pharmaceutical Inventory
             <span className="block text-blue-600 mt-1">
               Management & Trading
@@ -78,7 +82,7 @@ export default function HomePage() {
         <div className="mt-24">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900">
-              Built for Pharmaceutical Industry
+              Built for the Pharmaceutical Industry
             </h2>
             <p className="mt-4 max-w-2xl mx-auto text-lg text-gray-600">
               Professional-grade inventory management with compliance and security at its core.
@@ -144,7 +148,7 @@ export default function HomePage() {
                 Ready to streamline your pharmaceutical operations?
               </h2>
               <p className="mt-4 text-lg text-blue-100">
-                Join hundreds of pharmaceutical companies already using Atlas.
+                Start managing your inventory smarter with AI-powered tools.
               </p>
               <div className="mt-8">
                 <Link href="/register">

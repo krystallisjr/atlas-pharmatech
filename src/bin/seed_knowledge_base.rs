@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
 
     // Create a system user for seeding (or use existing admin)
     let system_user_id: uuid::Uuid = sqlx::query_scalar(
-        "SELECT id FROM users WHERE email = 'test@encrypted.com' LIMIT 1"
+        "SELECT id FROM users WHERE email = 'admin@atlaspharmatech.com' LIMIT 1"
     )
     .fetch_one(&pool)
     .await?;

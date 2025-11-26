@@ -63,8 +63,15 @@ export class AuthService {
   // Store auth data in localStorage
   static storeAuthData(authData: AuthResponse): void {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('atlas_token', authData.token);
-      localStorage.setItem('atlas_user', JSON.stringify(authData.user));
+      try {
+        localStorage.setItem('atlas_token', authData.token);
+        localStorage.setItem('atlas_user', JSON.stringify(authData.user));
+        // Also store in sessionStorage as fallback for iOS Safari
+        sessionStorage.setItem('atlas_token', authData.token);
+        sessionStorage.setItem('atlas_user', JSON.stringify(authData.user));
+      } catch (error) {
+        console.error('Failed to store auth data:', error);
+      }
     }
   }
 
@@ -74,8 +81,9 @@ export class AuthService {
       return { token: null, user: null };
     }
 
-    const token = localStorage.getItem('atlas_token');
-    const userStr = localStorage.getItem('atlas_user');
+    // Try localStorage first, fallback to sessionStorage for iOS Safari
+    const token = localStorage.getItem('atlas_token') || sessionStorage.getItem('atlas_token');
+    const userStr = localStorage.getItem('atlas_user') || sessionStorage.getItem('atlas_user');
     const user = userStr ? JSON.parse(userStr) : null;
 
     return { token, user };

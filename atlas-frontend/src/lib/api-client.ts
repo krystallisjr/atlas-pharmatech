@@ -28,7 +28,8 @@ class ApiClient {
     this.client.interceptors.request.use(
       (config) => {
         if (typeof window !== 'undefined') {
-          const token = localStorage.getItem('atlas_token');
+          // Try localStorage first, fallback to sessionStorage for iOS Safari
+          const token = localStorage.getItem('atlas_token') || sessionStorage.getItem('atlas_token');
           if (token) {
             config.headers.Authorization = `Bearer ${token}`;
           }

@@ -7,13 +7,14 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use crate::middleware::error_handling::{Result, AppError};
 use crate::models::ai_import::{MappedInventoryRow, ColumnMapping};
-use crate::repositories::OpenFdaRepository;
-use crate::services::OpenFdaService;
+use crate::repositories::{OpenFdaRepository, ema_repo::EmaRepository};
+use crate::services::{OpenFdaService, ema_service::EmaService};
 use std::str::FromStr;
 
 pub struct InventoryValidatorService {
     db_pool: PgPool,
     openfda_service: OpenFdaService,
+    ema_service: EmaService,
 }
 
 #[derive(Debug, Clone)]
@@ -26,12 +27,18 @@ pub struct ValidationResult {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EnrichedData {
+    pub source: String, // "OpenFDA" or "EMA"
     pub matched_ndc: Option<String>,
+    pub matched_eu_number: Option<String>,
     pub openfda_brand_name: Option<String>,
     pub openfda_generic_name: Option<String>,
     pub openfda_manufacturer: Option<String>,
     pub openfda_dosage_form: Option<String>,
     pub openfda_strength: Option<String>,
+    pub ema_product_name: Option<String>,
+    pub ema_active_substance: Option<String>,
+    pub ema_marketing_holder: Option<String>,
+    pub ema_atc_code: Option<String>,
     pub confidence_score: f32,
 }
 
@@ -39,10 +46,13 @@ impl InventoryValidatorService {
     pub fn new(db_pool: PgPool) -> Self {
         let openfda_repo = OpenFdaRepository::new(db_pool.clone());
         let openfda_service = OpenFdaService::new(openfda_repo);
+        let ema_repo = EmaRepository::new(db_pool.clone());
+        let ema_service = EmaService::new(ema_repo);
 
         Self {
             db_pool,
             openfda_service,
+            ema_service,
         }
     }
 
@@ -60,8 +70,13 @@ impl InventoryValidatorService {
             errors.push("Quantity is required and must be positive".to_string());
         }
 
-        // 2. Validate NDC format if provided
+        // 2. Try to identify and validate product identifier (NDC or EU number)
+        let mut product_identifier_found = false;
+
+        // Check for NDC (US product)
         if let Some(ref ndc) = row.ndc_code {
+            product_identifier_found = true;
+
             if !Self::is_valid_ndc_format(ndc) {
                 warnings.push(format!("NDC '{}' has non-standard format. Expected: 5-4-2 (e.g., 12345-678-90)", ndc));
             }
@@ -69,15 +84,21 @@ impl InventoryValidatorService {
             // Try to enrich from OpenFDA
             match self.openfda_service.get_by_ndc(ndc).await {
                 Ok(Some(fda_drug)) => {
-                    let confidence = Self::calculate_match_confidence(row, &fda_drug);
-                    
+                    let confidence = Self::calculate_openfda_match_confidence(row, &fda_drug);
+
                     enriched_data = Some(EnrichedData {
+                        source: "OpenFDA".to_string(),
                         matched_ndc: Some(fda_drug.product_ndc.clone()),
+                        matched_eu_number: None,
                         openfda_brand_name: Some(fda_drug.brand_name.clone()),
                         openfda_generic_name: Some(fda_drug.generic_name.clone()),
                         openfda_manufacturer: Some(fda_drug.labeler_name.clone()),
                         openfda_dosage_form: fda_drug.dosage_form.clone(),
                         openfda_strength: fda_drug.strength.clone(),
+                        ema_product_name: None,
+                        ema_active_substance: None,
+                        ema_marketing_holder: None,
+                        ema_atc_code: None,
                         confidence_score: confidence,
                     });
 
@@ -97,8 +118,56 @@ impl InventoryValidatorService {
                     warnings.push("Unable to verify against FDA catalog".to_string());
                 }
             }
-        } else {
-            warnings.push("No NDC code provided - cannot verify against FDA catalog".to_string());
+        }
+
+        // Check for EU number (European product) - look in brand_name or manufacturer fields
+        // EU numbers format: EU/1/YY/NNN/NNN (e.g., EU/1/97/049/001)
+        let eu_number_candidate = Self::extract_eu_number(row);
+
+        if let Some(ref eu_number) = eu_number_candidate {
+            product_identifier_found = true;
+
+            // Try to enrich from EMA
+            match self.ema_service.get_by_eu_number(eu_number).await {
+                Ok(Some(ema_product)) => {
+                    let confidence = Self::calculate_ema_match_confidence(row, &ema_product);
+
+                    enriched_data = Some(EnrichedData {
+                        source: "EMA".to_string(),
+                        matched_ndc: None,
+                        matched_eu_number: Some(ema_product.eu_number.clone()),
+                        openfda_brand_name: None,
+                        openfda_generic_name: None,
+                        openfda_manufacturer: None,
+                        openfda_dosage_form: None,
+                        openfda_strength: None,
+                        ema_product_name: Some(ema_product.product_name.clone()),
+                        ema_active_substance: ema_product.inn_name.clone(),
+                        ema_marketing_holder: Some(ema_product.mah_name.clone()),
+                        ema_atc_code: ema_product.atc_code.clone(),
+                        confidence_score: confidence,
+                    });
+
+                    if confidence >= 0.9 {
+                        tracing::info!("High-confidence EMA match for EU number: {}", eu_number);
+                    } else if confidence >= 0.7 {
+                        warnings.push(format!("Moderate EMA match confidence ({:.0}%) for EU number: {}", confidence * 100.0, eu_number));
+                    } else {
+                        warnings.push(format!("Low EMA match confidence ({:.0}%) for EU number: {}", confidence * 100.0, eu_number));
+                    }
+                }
+                Ok(None) => {
+                    warnings.push(format!("EU number '{}' not found in EMA catalog. Please verify.", eu_number));
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to lookup EU number {}: {}", eu_number, e);
+                    warnings.push("Unable to verify against EMA catalog".to_string());
+                }
+            }
+        }
+
+        if !product_identifier_found {
+            warnings.push("No product identifier (NDC or EU number) found - cannot verify against regulatory databases".to_string());
         }
 
         // 3. Validate product names
@@ -163,8 +232,77 @@ impl InventoryValidatorService {
         parts.iter().all(|part| part.chars().all(|c| c.is_numeric()) && !part.is_empty())
     }
 
+    /// Extract EU number from row data (format: EU/1/YY/NNN/NNN)
+    fn extract_eu_number(row: &MappedInventoryRow) -> Option<String> {
+        // EU number regex pattern: EU/1/YY/NNN/NNN
+        let eu_pattern = regex::Regex::new(r"EU/\d/\d{2}/\d{3}/\d{3}").ok()?;
+
+        // Check in NDC field (might contain EU number instead)
+        if let Some(ref ndc) = row.ndc_code {
+            if let Some(matched) = eu_pattern.find(ndc) {
+                return Some(matched.as_str().to_string());
+            }
+        }
+
+        // Check in brand name
+        if let Some(ref brand) = row.brand_name {
+            if let Some(matched) = eu_pattern.find(brand) {
+                return Some(matched.as_str().to_string());
+            }
+        }
+
+        // Check in manufacturer field
+        if let Some(ref manufacturer) = row.manufacturer {
+            if let Some(matched) = eu_pattern.find(manufacturer) {
+                return Some(matched.as_str().to_string());
+            }
+        }
+
+        None
+    }
+
+    /// Calculate confidence score for EMA match
+    fn calculate_ema_match_confidence(
+        row: &MappedInventoryRow,
+        ema_product: &crate::models::ema::EmaCatalogResponse,
+    ) -> f32 {
+        let mut score = 1.0f32;
+        let mut checks = 0;
+
+        // Compare product names
+        if let Some(ref brand_name) = row.brand_name {
+            checks += 1;
+            if !Self::fuzzy_match(&ema_product.product_name, brand_name) {
+                score -= 0.3;
+            }
+        }
+
+        // Compare INN (generic name) with row generic name
+        if let (Some(ref generic_name), Some(ref inn_name)) = (&row.generic_name, &ema_product.inn_name) {
+            checks += 1;
+            if !Self::fuzzy_match(inn_name, generic_name) {
+                score -= 0.3;
+            }
+        }
+
+        // Compare MAH (marketing authorization holder) with manufacturer
+        if let Some(ref manufacturer) = row.manufacturer {
+            checks += 1;
+            if !Self::fuzzy_match(&ema_product.mah_name, manufacturer) {
+                score -= 0.2;
+            }
+        }
+
+        // If no additional fields to check, lower confidence
+        if checks == 0 {
+            score -= 0.2;
+        }
+
+        score.max(0.0).min(1.0)
+    }
+
     /// Calculate confidence score for OpenFDA match
-    fn calculate_match_confidence(
+    fn calculate_openfda_match_confidence(
         row: &MappedInventoryRow,
         fda_drug: &crate::models::openfda::OpenFdaCatalogResponse,
     ) -> f32 {

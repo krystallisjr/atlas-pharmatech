@@ -94,7 +94,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}>
           <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-            <Link href="/dashboard" className="flex items-center gap-2 group">
+            <Link href="/dashboard" prefetch={true} className="flex items-center gap-2 group">
               <AtlasLogo size={32} className="transition-transform group-hover:scale-110" />
               <span className="text-xl font-bold text-gray-900">Atlas PharmaTech</span>
             </Link>
@@ -117,13 +117,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Link
                     key={item.name}
                     href={item.href}
+                    prefetch={true}
                     className={cn(
                       "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       isActive
                         ? "bg-blue-100 text-blue-700"
                         : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                     )}
-                    onClick={() => setSidebarOpen(false)}
+                    onClick={(e) => {
+                      // Don't prevent default - let Link handle navigation
+                      setSidebarOpen(false);
+                    }}
                   >
                     <item.icon className="mr-3 h-5 w-5" />
                     {item.name}
@@ -148,13 +152,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       <Link
                         key={item.name}
                         href={item.href}
+                        prefetch={true}
                         className={cn(
                           "flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors",
                           isActive
                             ? "bg-purple-100 text-purple-700"
                             : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                         )}
-                        onClick={() => setSidebarOpen(false)}
+                        onClick={(e) => {
+                          // Don't prevent default - let Link handle navigation
+                          setSidebarOpen(false);
+                        }}
                       >
                         <div className="flex items-center">
                           <item.icon className="mr-3 h-5 w-5" />

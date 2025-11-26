@@ -50,20 +50,35 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       asChild = false,
       isLoading = false,
       children,
+      onClick,
       ...props
     },
     ref
   ) => {
     const Comp = asChild ? Slot : "button";
+
+    // Fix double-click issue by ensuring event fires immediately
+    const handleClick = React.useCallback(
+      (e: React.MouseEvent<HTMLButtonElement>) => {
+        if (isLoading || props.disabled) {
+          e.preventDefault();
+          return;
+        }
+        onClick?.(e);
+      },
+      [onClick, isLoading, props.disabled]
+    );
+
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        disabled={isLoading || props.disabled} // Disable button when loading
+        disabled={isLoading || props.disabled}
+        onClick={handleClick}
+        type={props.type || "button"} // Default to button to prevent form submission
         {...props}
       >
-        {isLoading ? <FaSpinner className="animate-spin" /> : children}{" "}
-        {/* Show spinner when loading */}
+        {isLoading ? <FaSpinner className="animate-spin" /> : children}
       </Comp>
     );
   }
