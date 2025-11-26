@@ -48,3 +48,16 @@ certs/*.key
 *.tmp
 *.temp
 *.bak
+.env.backup.*
+
+# Runtime uploads
+uploads/
+
+# SQL files with credentials
+fix_admin_password.sql
+*_password.sql
+
+# Test and archive files
+login_test.json
+*.tar.gz
+*.zip
